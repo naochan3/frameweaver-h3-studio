@@ -1,0 +1,67 @@
+@import "tailwindcss";
+
+@theme {
+  --color-cream-50: #faf7f2;
+  --color-cream-100: #f4efe6;
+  --color-cream-200: #e9e1d3;
+  --color-accent-400: #f59e5b;
+  --color-accent-500: #ef8236;
+  --color-accent-600: #e06d1f;
+  --color-ink-900: #2b2420;
+  --color-ink-600: #6b5f55;
+  --color-ink-400: #a39588;
+}
+
+body {
+  background-color: var(--color-cream-50);
+  color: var(--color-ink-900);
+}
+
+/* 使い方ガイドのアニメーション */
+@keyframes guide-panel-in {
+  from { opacity: 0; transform: translateY(16px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.guide-panel { animation: guide-panel-in 0.35s ease-out; }
+
+@keyframes guide-tab-pulse {
+  0%, 100% { background-color: transparent; }
+  50% { background-color: var(--color-accent-500); color: white; }
+}
+.guide-tab { animation: guide-tab-pulse 3s ease-in-out infinite; }
+
+@keyframes guide-progress-fill {
+  0% { width: 0%; }
+  80% { width: 92%; }
+  100% { width: 100%; }
+}
+.guide-progress { animation: guide-progress-fill 4s ease-in-out infinite; }
+
+@keyframes guide-knob-slide {
+  0%, 40% { left: 2px; }
+  60%, 100% { left: 22px; }
+}
+.guide-toggle-knob { animation: guide-knob-slide 2.5s ease-in-out infinite alternate; }
+@keyframes guide-toggle-bg {
+  0%, 40% { background-color: var(--color-cream-200); }
+  60%, 100% { background-color: #ec4899; }
+}
+.guide-toggle { animation: guide-toggle-bg 2.5s ease-in-out infinite alternate; }
+
+@keyframes guide-drop-bounce {
+  0%, 100% { transform: translateY(0); border-color: var(--color-cream-200); }
+  50% { transform: translateY(-6px); border-color: var(--color-accent-500); }
+}
+.guide-drop { animation: guide-drop-bounce 2.4s ease-in-out infinite; }
+
+@keyframes guide-card-glow {
+  0%, 100% { border-color: var(--color-cream-200); transform: scale(1); }
+  50% { border-color: var(--color-accent-500); transform: scale(1.04); }
+}
+.guide-card { animation: guide-card-glow 2.4s ease-in-out infinite; }
+
+@keyframes guide-typing-in {
+  from { clip-path: inset(0 100% 0 0); }
+  to { clip-path: inset(0 0 0 0); }
+}
+.guide-typing { animation: guide-typing-in 3.5s steps(40) infinite; }
