@@ -173,12 +173,13 @@ export class ComfyClient {
     }
   }
 
-  /** output/<subdir>(video/zimage/krea2)内のメディアファイル一覧を新しい順で取得 */
-  async listOutput(subdir: string): Promise<{ filename: string; mtime: number }[]> {
+  /** output/<subdir>(video/zimage/krea2)内のメディアファイル一覧を新しい順で取得。
+   * prompt はファイル埋め込みワークフローから復元したもの(旧版アドオンでは undefined) */
+  async listOutput(subdir: string): Promise<{ filename: string; mtime: number; prompt?: string | null }[]> {
     try {
       const res = await fetch(`${this.baseUrl}/frameweaver/list_output?subdir=${encodeURIComponent(subdir)}`)
       if (!res.ok) return []
-      const json = (await res.json()) as { files?: { filename: string; mtime: number }[] }
+      const json = (await res.json()) as { files?: { filename: string; mtime: number; prompt?: string | null }[] }
       return json.files ?? []
     } catch {
       return []

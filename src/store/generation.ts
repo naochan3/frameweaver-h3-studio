@@ -1,5 +1,7 @@
 import { create } from 'zustand'
 import { ComfyClient } from '../lib/comfy-client'
+import { DRAFT_KEYS, loadDraft, saveDraft } from '../lib/draft'
+import { pickHistoryMatch } from '../lib/history-match'
 import { buildImageWorkflow } from '../lib/image-workflow'
 import { imageRecommendedParams, videoRecommendedParams } from '../lib/presets'
 import { randomSeed } from '../lib/seed'
@@ -149,7 +151,7 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
   vram: null,
   params: {
     mode: 'text',
-    prompt: '',
+    prompt: loadDraft(localStorage, DRAFT_KEYS.videoPrompt),
     nsfw: false,
     images: [],
     turbo: true,
@@ -180,7 +182,7 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
   appTab: 'video',
   imageParams: {
     model: 'zimage',
-    prompt: '',
+    prompt: loadDraft(localStorage, DRAFT_KEYS.imagePrompt),
     width: 864,
     height: 1536,
     steps: 8,
@@ -406,20 +408,18 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
     const { historyTab, history } = get()
     set({ folderLoading: true })
     const files = await client.listOutput(historyTab)
-    // localStorage履歴(プロンプト・設定あり)をファイル名で突き合わせて情報を補強。
-    // ComfyUIの連番はセッションをまたぐと再利用されるため、同名は最新(履歴の先頭側)を採用する。
-    const byName = new Map<string, HistoryItem>()
-    for (const h of history) {
-      if (!byName.has(h.filename)) byName.set(h.filename, h)
-    }
+    // localStorage履歴(プロンプト・設定あり)を「ファイル名+時刻の近さ」で突き合わせて情報を補強。
+    // ComfyUIの連番はセッションをまたぐと再利用されるため、名前だけの一致では別ジョブの
+    // プロンプトが付くことがある(pickHistoryMatch が時刻許容範囲外を弾く)。
     const kind: OutputKind = historyTab === 'video' ? 'video' : 'image'
     const items: HistoryItem[] = files.map((f) => {
-      const m = byName.get(f.filename)
+      const m = pickHistoryMatch(history, f.filename, f.mtime)
       return {
         promptId: m?.promptId ?? f.filename,
         kind,
         mode: m?.mode ?? (historyTab === 'video' ? 'video' : historyTab),
-        prompt: m?.prompt ?? '',
+        // localStorage履歴に無ければファイル埋め込みメタデータから復元したプロンプトを使う
+        prompt: m?.prompt ?? f.prompt ?? '',
         nsfw: m?.nsfw ?? false,
         videoUrl: client.viewUrl({ filename: f.filename, subfolder: historyTab, type: 'output' }),
         filename: f.filename,
@@ -538,6 +538,16 @@ client.onEvent((ev) => {
 })
 
 client.connect()
+
+// プロンプト下書きの永続化(リロードしても消えないように変更のたび保存)
+useGenerationStore.subscribe((s, prev) => {
+  if (s.params.prompt !== prev.params.prompt) {
+    saveDraft(localStorage, DRAFT_KEYS.videoPrompt, s.params.prompt)
+  }
+  if (s.imageParams.prompt !== prev.imageParams.prompt) {
+    saveDraft(localStorage, DRAFT_KEYS.imagePrompt, s.imageParams.prompt)
+  }
+})
 
 // VRAM 監視(5秒ポーリング)
 setInterval(async () => {

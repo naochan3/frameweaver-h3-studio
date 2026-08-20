@@ -24,6 +24,7 @@ dist-ssr
 *.sw?
 
 _trash/
+__pycache__/
 
 # 生成サンプル(NSFW・実写人物を含むため公開リポジトリからは除外。手元には残す)
 samples/

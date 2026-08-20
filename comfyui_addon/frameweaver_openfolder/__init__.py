@@ -7,6 +7,8 @@ import subprocess
 from aiohttp import web
 from server import PromptServer
 
+from .metadata import extract_prompt
+
 # ComfyUI の出力ルート(このcustom_nodesから2つ上がComfyUI本体)
 COMFY_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 OUTPUT_ROOT = os.path.join(COMFY_ROOT, "output")
@@ -69,7 +71,9 @@ async def list_output(request: web.Request) -> web.Response:
                 mtime = os.path.getmtime(path)
             except OSError:
                 mtime = 0.0
-            files.append({"filename": name, "mtime": mtime})
+            # ファイル埋め込みのワークフローJSONからプロンプトを復元
+            # (localStorage履歴が回転して消えた古いファイルでもRECENTに表示するため)
+            files.append({"filename": name, "mtime": mtime, "prompt": extract_prompt(path)})
     files.sort(key=lambda f: f["mtime"], reverse=True)
     return web.json_response({"ok": True, "subdir": subdir, "files": files})
 
