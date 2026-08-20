@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { loraNote } from '../lib/lora'
+import { classifyLora, selectableLoras } from '../lib/lora'
 import { ASPECT_OPTIONS, IMAGE_MP_OPTIONS, computeResolution, type AspectRatio } from '../lib/resolution'
 import type { ImageModel } from '../lib/types'
 import { useGenerationStore } from '../store/generation'
@@ -145,15 +145,45 @@ export function ImageStudio() {
               className="mt-1 w-full rounded-lg border border-cream-200 bg-cream-50 p-2 text-sm font-normal"
             />
             <datalist id="lora-list-image">
-              {loraList.map((name) => (
-                <option key={name} value={name} label={loraNote(name)} />
-              ))}
+              {(() => {
+                const { compatible, unknown } = selectableLoras(loraList, imageParams.model)
+                return [...compatible, ...unknown].map((name) => (
+                  <option key={name} value={name} label={classifyLora(name).note} />
+                ))
+              })()}
             </datalist>
-            <p className="mt-1 font-normal text-ink-400">
-              自作キャラLoRA(例: ひなの)や画風LoRAを適用します。
-              <code className="rounded bg-cream-100 px-1">turbo</code> や
-              <code className="rounded bg-cream-100 px-1">heretic</code> を含むものは動画用なので選ばないでください。
-            </p>
+            {(() => {
+              const { compatible, unknown } = selectableLoras(loraList, imageParams.model)
+              const modelLabel = imageParams.model === 'krea2' ? 'Krea 2' : 'Z-Image'
+              if (compatible.length + unknown.length === 0)
+                return (
+                  <p className="mt-1 font-normal text-amber-600">
+                    {modelLabel}用のLoRAが未導入のため候補がありません。導入したら候補に自動で並びます。
+                  </p>
+                )
+              return (
+                <p className="mt-1 font-normal text-ink-400">
+                  候補には{modelLabel}用のLoRAだけを表示しています。
+                  LoRAは学習元モデル専用で、別モデル用を選んでも効きません。
+                </p>
+              )
+            })()}
+            {imageParams.extraLora.trim() &&
+              (() => {
+                const info = classifyLora(imageParams.extraLora.trim())
+                if (info.target === imageParams.model) return null
+                if (info.target === 'unknown')
+                  return (
+                    <p className="mt-1 font-semibold text-amber-600">
+                      注意: このLoRAの対象モデルは未確認です。効かない可能性があります。
+                    </p>
+                  )
+                return (
+                  <p className="mt-1 font-semibold text-red-600">
+                    警告: {info.note}。{imageParams.model === 'krea2' ? 'Krea 2' : 'Z-Image'} では効きません。
+                  </p>
+                )
+              })()}
           </label>
 
           {imageParams.extraLora.trim() && (

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { loraNote } from '../lib/lora'
+import { classifyLora, selectableLoras } from '../lib/lora'
 import { ASPECT_OPTIONS, VIDEO_MP_OPTIONS, computeResolution, type AspectRatio } from '../lib/resolution'
 import { imageSlots, useGenerationStore } from '../store/generation'
 
@@ -158,14 +158,45 @@ export function RecipePanel() {
             className="mt-1 w-full rounded-lg border border-cream-200 bg-cream-50 p-2 text-sm font-normal"
           />
           <datalist id="lora-list">
-            {loraList.map((name) => (
-              <option key={name} value={name} label={loraNote(name)} />
-            ))}
+            {(() => {
+              const { compatible, unknown } = selectableLoras(loraList, 'video')
+              return [...compatible, ...unknown].map((name) => (
+                <option key={name} value={name} label={classifyLora(name).note} />
+              ))
+            })()}
           </datalist>
-          <p className="mt-1 font-normal text-ink-400">
-            自分で学習したキャラ/画風LoRAを重ねたいときだけ指定します。上のTurbo LoRAは自動で適用されるので、
-            ここで <code className="rounded bg-cream-100 px-1">turbo</code> を含むファイルを選ぶ必要はありません。
-          </p>
+          {(() => {
+            const { compatible, unknown } = selectableLoras(loraList, 'video')
+            if (compatible.length + unknown.length === 0)
+              return (
+                <p className="mt-1 font-normal text-amber-600">
+                  MiniMax H3用のキャラ・画風LoRAが未導入のため候補がありません(Turbo系は自動適用なのでここには出ません)。
+                  導入したら候補に自動で並びます。
+                </p>
+              )
+            return (
+              <p className="mt-1 font-normal text-ink-400">
+                候補にはMiniMax H3用のLoRAだけを表示しています(Turbo LoRAは自動適用なので選択不要)。
+                画像用(Z-Image/Krea 2)のLoRAは動画では効きません。
+              </p>
+            )
+          })()}
+          {params.extraLora.trim() &&
+            (() => {
+              const info = classifyLora(params.extraLora.trim())
+              if (info.target === 'video') return null
+              if (info.target === 'unknown')
+                return (
+                  <p className="mt-1 font-semibold text-amber-600">
+                    注意: このLoRAの対象モデルは未確認です。効かない可能性があります。
+                  </p>
+                )
+              return (
+                <p className="mt-1 font-semibold text-red-600">
+                  警告: {info.note}。動画(MiniMax H3)では効きません。
+                </p>
+              )
+            })()}
         </label>
 
         {params.extraLora.trim() && (
