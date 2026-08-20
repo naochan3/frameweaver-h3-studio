@@ -37,6 +37,8 @@ export interface HistoryItem {
     // 動画のみ
     lengthSec?: number
     turbo?: boolean
+    /** 生成にかかった秒数(このブラウザで生成したもののみ記録) */
+    durationSec?: number
   }
 }
 
@@ -404,8 +406,12 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
     const { historyTab, history } = get()
     set({ folderLoading: true })
     const files = await client.listOutput(historyTab)
-    // localStorage履歴(プロンプト・設定あり)をファイル名で突き合わせて情報を補強
-    const byName = new Map(history.map((h) => [h.filename, h]))
+    // localStorage履歴(プロンプト・設定あり)をファイル名で突き合わせて情報を補強。
+    // ComfyUIの連番はセッションをまたぐと再利用されるため、同名は最新(履歴の先頭側)を採用する。
+    const byName = new Map<string, HistoryItem>()
+    for (const h of history) {
+      if (!byName.has(h.filename)) byName.set(h.filename, h)
+    }
     const kind: OutputKind = historyTab === 'video' ? 'video' : 'image'
     const items: HistoryItem[] = files.map((f) => {
       const m = byName.get(f.filename)
@@ -432,7 +438,8 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
 
 async function handleDone(promptId: string) {
   const outputs = await client.fetchOutputs(promptId)
-  const { params, imageParams, history, currentKind } = useGenerationStore.getState()
+  const { params, imageParams, history, currentKind, startedAt } = useGenerationStore.getState()
+  const durationSec = startedAt ? Math.round((Date.now() - startedAt) / 1000) : undefined
   const output =
     currentKind === 'video'
       ? (outputs.find((o) => /\.(mp4|webm|mov)$/i.test(o.filename)) ?? outputs[0])
@@ -462,6 +469,7 @@ async function handleDone(promptId: string) {
             extraLoraStrength: params.extraLoraStrength,
             lengthSec: params.lengthSec,
             turbo: params.turbo,
+            durationSec,
           }
         : {
             width: imageParams.width,
@@ -470,6 +478,7 @@ async function handleDone(promptId: string) {
             seed: imageParams.seed,
             extraLora: imageParams.extraLora,
             extraLoraStrength: imageParams.extraLoraStrength,
+            durationSec,
           },
   }
   const newHistory = [item, ...history]

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { formatDuration } from '../lib/eta'
 import { useGenerationStore } from '../store/generation'
 
 const MODE_LABEL: Record<string, string> = {
@@ -97,6 +98,7 @@ export function HistoryDetail() {
               {item.nsfw && <Row label="NSFW" value="ON(無検閲エンコーダ)" />}
               {s ? (
                 <>
+                  {s.durationSec !== undefined && <Row label="生成時間" value={formatDuration(s.durationSec)} />}
                   <Row label="解像度" value={`${s.width} × ${s.height}`} />
                   <Row label="ステップ数" value={String(s.steps)} />
                   <Row label="シード" value={s.seed === -1 ? 'ランダム' : String(s.seed)} />
