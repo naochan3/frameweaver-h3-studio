@@ -48,7 +48,17 @@ export function HistoryDetail() {
               title="クリックで拡大"
             />
           ) : (
-            <video src={item.videoUrl} controls autoPlay loop className="max-h-[84vh] w-auto max-w-full" />
+            <video
+              src={item.videoUrl}
+              controls
+              autoPlay
+              loop
+              muted
+              ref={(el) => {
+                if (el) el.muted = true
+              }}
+              className="max-h-[84vh] w-auto max-w-full"
+            />
           )}
         </div>
 

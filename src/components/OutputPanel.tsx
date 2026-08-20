@@ -72,7 +72,18 @@ export function OutputPanel() {
         {videoUrl && resultKind === 'image' ? (
           <img key={videoUrl} src={videoUrl} alt="生成画像" className="max-h-[68vh] w-auto max-w-full object-contain" />
         ) : videoUrl ? (
-          <video key={videoUrl} src={videoUrl} controls autoPlay loop className="max-h-[68vh] w-auto max-w-full" />
+          <video
+            key={videoUrl}
+            src={videoUrl}
+            controls
+            autoPlay
+            loop
+            muted
+            ref={(el) => {
+              if (el) el.muted = true
+            }}
+            className="max-h-[68vh] w-auto max-w-full"
+          />
         ) : previewUrl && busy ? (
           <img src={previewUrl} alt="生成中プレビュー" className="max-h-[68vh] w-auto max-w-full object-contain" />
         ) : (
