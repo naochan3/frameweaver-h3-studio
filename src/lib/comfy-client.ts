@@ -173,6 +173,18 @@ export class ComfyClient {
     }
   }
 
+  /** output/<subdir>(video/zimage/krea2)内のメディアファイル一覧を新しい順で取得 */
+  async listOutput(subdir: string): Promise<{ filename: string; mtime: number }[]> {
+    try {
+      const res = await fetch(`${this.baseUrl}/frameweaver/list_output?subdir=${encodeURIComponent(subdir)}`)
+      if (!res.ok) return []
+      const json = (await res.json()) as { files?: { filename: string; mtime: number }[] }
+      return json.files ?? []
+    } catch {
+      return []
+    }
+  }
+
   async freeMemory(): Promise<void> {
     await fetch(`${this.baseUrl}/free`, {
       method: 'POST',

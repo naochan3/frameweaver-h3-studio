@@ -47,6 +47,33 @@ async def open_output(request: web.Request) -> web.Response:
     return web.json_response({"ok": True, "path": target})
 
 
+_MEDIA_EXTS = (".png", ".jpg", ".jpeg", ".webp", ".mp4", ".webm", ".mov", ".gif")
+
+
+@PromptServer.instance.routes.get("/frameweaver/list_output")
+async def list_output(request: web.Request) -> web.Response:
+    """output/<subdir> 内のメディアファイル一覧を新しい順で返す(video/zimage/krea2)。"""
+    subdir = str(request.query.get("subdir", "")).strip().strip("/\\")
+    if subdir == "" or subdir not in ALLOWED_SUBDIRS:
+        return web.json_response({"ok": False, "error": "invalid subdir"}, status=400)
+
+    target = os.path.normpath(os.path.join(OUTPUT_ROOT, subdir))
+    if not target.startswith(os.path.normpath(OUTPUT_ROOT)) or not os.path.isdir(target):
+        return web.json_response({"ok": True, "subdir": subdir, "files": []})
+
+    files = []
+    for name in os.listdir(target):
+        if name.lower().endswith(_MEDIA_EXTS):
+            path = os.path.join(target, name)
+            try:
+                mtime = os.path.getmtime(path)
+            except OSError:
+                mtime = 0.0
+            files.append({"filename": name, "mtime": mtime})
+    files.sort(key=lambda f: f["mtime"], reverse=True)
+    return web.json_response({"ok": True, "subdir": subdir, "files": files})
+
+
 NODE_CLASS_MAPPINGS = {}
 NODE_DISPLAY_NAME_MAPPINGS = {}
-print("[FrameWeaver] open_output API registered (/frameweaver/open_output)")
+print("[FrameWeaver] APIs registered (/frameweaver/open_output, /frameweaver/list_output)")

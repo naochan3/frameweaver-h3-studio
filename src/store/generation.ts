@@ -66,6 +66,11 @@ interface GenerationState {
   resultKind: OutputKind
   error: string | null
   history: HistoryItem[]
+  /** RECENTの分類タブ('video'=MiniMax H3 / 'zimage' / 'krea2') */
+  historyTab: 'video' | 'zimage' | 'krea2'
+  /** 選択中タブのフォルダから読み込んだ過去生成一覧 */
+  folderItems: HistoryItem[]
+  folderLoading: boolean
   /** アプリ上部のタブ(動画/画像) */
   appTab: 'video' | 'image'
   imageParams: ImageParams
@@ -104,6 +109,10 @@ interface GenerationState {
   freeVram: () => Promise<void>
   /** 出力フォルダをエクスプローラーで開く('' / video / zimage / krea2) */
   openOutputFolder: (subdir: string) => Promise<void>
+  /** RECENTの分類タブを切り替え、そのフォルダを読み込む */
+  setHistoryTab: (tab: 'video' | 'zimage' | 'krea2') => void
+  /** 選択中タブのフォルダを再読み込みする */
+  reloadFolder: () => Promise<void>
   clearHistory: () => void
 }
 
@@ -163,6 +172,9 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
   resultKind: 'video',
   error: null,
   history: loadHistory(),
+  historyTab: 'video',
+  folderItems: [],
+  folderLoading: false,
   appTab: 'video',
   imageParams: {
     model: 'zimage',
@@ -383,6 +395,35 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
     }
   },
 
+  setHistoryTab: (tab) => {
+    set({ historyTab: tab })
+    void get().reloadFolder()
+  },
+
+  reloadFolder: async () => {
+    const { historyTab, history } = get()
+    set({ folderLoading: true })
+    const files = await client.listOutput(historyTab)
+    // localStorage履歴(プロンプト・設定あり)をファイル名で突き合わせて情報を補強
+    const byName = new Map(history.map((h) => [h.filename, h]))
+    const kind: OutputKind = historyTab === 'video' ? 'video' : 'image'
+    const items: HistoryItem[] = files.map((f) => {
+      const m = byName.get(f.filename)
+      return {
+        promptId: m?.promptId ?? f.filename,
+        kind,
+        mode: m?.mode ?? (historyTab === 'video' ? 'video' : historyTab),
+        prompt: m?.prompt ?? '',
+        nsfw: m?.nsfw ?? false,
+        videoUrl: client.viewUrl({ filename: f.filename, subfolder: historyTab, type: 'output' }),
+        filename: f.filename,
+        createdAt: m?.createdAt ?? new Date(f.mtime * 1000).toISOString(),
+        settings: m?.settings,
+      }
+    })
+    set({ folderItems: items, folderLoading: false })
+  },
+
   clearHistory: () => {
     saveHistory([])
     set({ history: [] })
@@ -433,13 +474,16 @@ async function handleDone(promptId: string) {
   }
   const newHistory = [item, ...history]
   saveHistory(newHistory)
+  const subdir: 'video' | 'zimage' | 'krea2' = currentKind === 'video' ? 'video' : imageParams.model
   useGenerationStore.setState({
     status: 'done',
     videoUrl: url,
     resultKind: currentKind,
     history: newHistory,
     progress: null,
+    historyTab: subdir,
   })
+  void useGenerationStore.getState().reloadFolder()
 }
 
 // WebSocketイベント → ストア反映
@@ -450,6 +494,7 @@ client.onEvent((ev) => {
       if (ev.message === 'connected') {
         useGenerationStore.setState({ connected: true })
         void client.getLoraList().then((loraList) => useGenerationStore.setState({ loraList }))
+        void useGenerationStore.getState().reloadFolder()
       }
       if (ev.message === 'disconnected') useGenerationStore.setState({ connected: false })
       if (ev.queueRemaining !== undefined) useGenerationStore.setState({ queueRemaining: ev.queueRemaining })
