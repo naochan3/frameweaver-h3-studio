@@ -72,7 +72,7 @@ export function RecipePanel() {
         </div>
       </label>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="text-xs font-semibold text-ink-600">
           アスペクト比(縦横比)
           <div className="mt-1 flex gap-1">
@@ -148,7 +148,7 @@ export function RecipePanel() {
           />
         </label>
 
-        <label className="col-span-2 text-xs font-semibold text-ink-600">
+        <label className="sm:col-span-2 text-xs font-semibold text-ink-600">
           追加LoRA(自作キャラ・画風LoRA・任意)
           <input
             list="lora-list"
@@ -200,7 +200,7 @@ export function RecipePanel() {
         </label>
 
         {params.extraLora.trim() && (
-          <label className="col-span-2 text-xs font-semibold text-ink-600">
+          <label className="sm:col-span-2 text-xs font-semibold text-ink-600">
             追加LoRA強度: {params.extraLoraStrength.toFixed(2)}(キャラLoRAは0.8〜1.0が目安)
             <input
               type="range"
@@ -214,7 +214,7 @@ export function RecipePanel() {
           </label>
         )}
 
-        <div className="col-span-2 text-xs font-semibold text-ink-600">
+        <div className="sm:col-span-2 text-xs font-semibold text-ink-600">
           シード
           <div className="mt-1 flex items-center gap-2">
             <button

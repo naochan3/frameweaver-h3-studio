@@ -58,9 +58,10 @@ export function GenerateBar() {
           <button
             onClick={() => void (isVideo ? generate() : generateImage())}
             disabled={!ready}
-            className="shrink-0 rounded-xl bg-accent-500 px-8 py-3 text-sm font-bold text-white shadow-lg transition-colors hover:bg-accent-600 disabled:cursor-not-allowed disabled:bg-cream-200 disabled:text-ink-400"
+            className="shrink-0 rounded-xl bg-accent-500 px-4 py-3 text-sm font-bold text-white shadow-lg transition-colors hover:bg-accent-600 disabled:cursor-not-allowed disabled:bg-cream-200 disabled:text-ink-400 sm:px-8"
           >
-            {label} →
+            <span className="sm:hidden">{isVideo ? '動画生成' : '画像生成'} →</span>
+            <span className="hidden sm:inline">{label} →</span>
           </button>
         )}
       </div>
