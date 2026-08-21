@@ -17,12 +17,12 @@ export function AppTabs() {
           <button
             key={t.key}
             onClick={() => setAppTab(t.key)}
-            className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 transition-all duration-300 ${
+            className={`flex flex-1 flex-col items-center justify-center gap-0 rounded-xl px-2 py-2 transition-all duration-300 sm:flex-row sm:gap-2 sm:px-4 sm:py-2.5 ${
               active ? 'bg-ink-900 text-white shadow' : 'text-ink-600 hover:bg-cream-100'
             }`}
           >
-            <span className="text-sm font-bold">{t.label}</span>
-            <span className={`text-[10px] tracking-wider ${active ? 'text-white/60' : 'text-ink-400'}`}>{t.sub}</span>
+            <span className="whitespace-nowrap text-sm font-bold">{t.label}</span>
+            <span className={`whitespace-nowrap text-[10px] tracking-wider ${active ? 'text-white/60' : 'text-ink-400'}`}>{t.sub}</span>
           </button>
         )
       })}

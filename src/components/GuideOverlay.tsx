@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useGenerationStore } from '../store/generation'
+import { useBodyScrollLock } from '../lib/useBodyScrollLock'
 
 interface GuideStep {
   title: string

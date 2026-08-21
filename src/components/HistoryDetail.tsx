@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { formatDuration } from '../lib/eta'
 import { useGenerationStore } from '../store/generation'
+import { useBodyScrollLock } from '../lib/useBodyScrollLock'
 
 const MODE_LABEL: Record<string, string> = {
   text: 'Text(テキスト→動画)',
@@ -8,6 +9,7 @@ const MODE_LABEL: Record<string, string> = {
   first_last: 'First+Last(2枚をつなぐ)',
   last: 'Last(終了画像→動画)',
   reference: 'Reference(参照→動画)',
+  video: '動画(MiniMax H3)',
   zimage: 'Z-Image Turbo',
   krea2: 'Krea 2 Turbo',
 }
@@ -27,6 +29,7 @@ export function HistoryDetail() {
   const applyHistorySettings = useGenerationStore((s) => s.applyHistorySettings)
   const sendImageToSource = useGenerationStore((s) => s.sendImageToSource)
   const [zoomed, setZoomed] = useState(false)
+  useBodyScrollLock(item != null)
 
   if (!item) return null
   const s = item.settings
@@ -38,14 +41,14 @@ export function HistoryDetail() {
         className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl md:flex-row"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* メディア */}
-        <div className="flex items-center justify-center bg-black p-2 md:w-1/2">
+        {/* メディア(モバイルは高さを抑えて詳細も見えるように) */}
+        <div className="flex shrink-0 items-center justify-center bg-black p-2 md:w-1/2">
           {item.kind === 'image' ? (
             <img
               src={item.videoUrl}
               alt={item.filename}
               onClick={() => setZoomed(true)}
-              className="max-h-[84vh] w-auto max-w-full cursor-zoom-in object-contain"
+              className="max-h-[40vh] w-auto max-w-full cursor-zoom-in object-contain md:max-h-[84vh]"
               title="クリックで拡大"
             />
           ) : (
@@ -58,7 +61,7 @@ export function HistoryDetail() {
               ref={(el) => {
                 if (el) el.muted = true
               }}
-              className="max-h-[84vh] w-auto max-w-full"
+              className="max-h-[40vh] w-auto max-w-full md:max-h-[84vh]"
             />
           )}
         </div>

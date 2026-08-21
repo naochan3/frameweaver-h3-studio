@@ -14,14 +14,14 @@ export function ModeTabs() {
   const setMode = useGenerationStore((s) => s.setMode)
 
   return (
-    <nav className="flex gap-1 rounded-2xl bg-white p-2 shadow-sm">
+    <nav className="flex gap-1 overflow-x-auto rounded-2xl bg-white p-1.5 shadow-sm sm:p-2">
       {MODES.map((m) => {
         const active = m.mode === mode
         return (
           <button
             key={m.mode}
             onClick={() => setMode(m.mode)}
-            className={`flex flex-1 flex-col items-center rounded-xl px-4 py-2 transition-colors ${
+            className={`flex shrink-0 flex-col items-center whitespace-nowrap rounded-xl px-3 py-2 transition-colors sm:flex-1 sm:px-4 ${
               active ? 'bg-accent-500 text-white shadow' : 'text-ink-600 hover:bg-cream-100'
             }`}
           >
