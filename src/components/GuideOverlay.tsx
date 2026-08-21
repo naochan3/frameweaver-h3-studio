@@ -140,6 +140,7 @@ export function GuideOverlay() {
   const guideOpen = useGenerationStore((s) => s.guideOpen)
   const setGuideOpen = useGenerationStore((s) => s.setGuideOpen)
   const [step, setStep] = useState(0)
+  useBodyScrollLock(guideOpen)
 
   if (!guideOpen) return null
   const s = STEPS[step]
