@@ -36,6 +36,16 @@ describe('classifyLora', () => {
     expect(classifyLora('mystery_lora.safetensors').target).toBe('unknown')
   })
 
+  it('アニメ(Illustrious/Pony/NoobAI/SDXL)系は anime', () => {
+    expect(classifyLora('someIllustriousChar.safetensors').target).toBe('anime')
+    expect(classifyLora('cool_pony_style.safetensors').target).toBe('anime')
+    // DL時のサブフォルダ接頭辞で確実に判定
+    expect(classifyLora('illustrious/whatever.safetensors').target).toBe('anime')
+    expect(classifyLora('noobai/char.safetensors').target).toBe('anime')
+    expect(classifyLora('zimageturbo/style.safetensors').target).toBe('zimage')
+    expect(classifyLora('krea2/face.safetensors').target).toBe('krea2')
+  })
+
   it('note に用途説明が入る', () => {
     expect(classifyLora('hinano_v2_lora.safetensors').note).toContain('Z-Image')
     expect(classifyLora('K2R_KTMix_KR_v01.safetensors').note).toContain('Krea 2')

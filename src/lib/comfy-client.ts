@@ -237,6 +237,18 @@ export class ComfyClient {
     }
   }
 
+  /** 選択可能なチェックポイント(SDXL等)ファイル名一覧を取得 */
+  async getCheckpointList(): Promise<string[]> {
+    try {
+      const res = await fetch(`${this.baseUrl}/object_info/CheckpointLoaderSimple`)
+      if (!res.ok) return []
+      const json = (await res.json()) as Record<string, { input?: { required?: { ckpt_name?: [string[]] } } }>
+      return json['CheckpointLoaderSimple']?.input?.required?.ckpt_name?.[0] ?? []
+    } catch {
+      return []
+    }
+  }
+
   async systemStats(): Promise<{ vramTotal: number; vramFree: number } | null> {
     try {
       const res = await fetch(`${this.baseUrl}/system_stats`)

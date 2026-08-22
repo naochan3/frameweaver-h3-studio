@@ -10,12 +10,14 @@ const MODE_LABEL: Record<string, string> = {
   video: '動画',
   zimage: 'Z-Image',
   krea2: 'Krea 2',
+  anime: 'アニメ',
 }
 
-const TABS: { key: 'video' | 'zimage' | 'krea2'; label: string; sub: string }[] = [
+const TABS: { key: 'video' | 'zimage' | 'krea2' | 'anime'; label: string; sub: string }[] = [
   { key: 'video', label: '動画', sub: 'MiniMax H3' },
   { key: 'zimage', label: 'Z-Image', sub: '画像' },
   { key: 'krea2', label: 'Krea 2', sub: '画像' },
+  { key: 'anime', label: 'アニメ', sub: 'Illustrious' },
 ]
 
 export function HistoryPanel() {

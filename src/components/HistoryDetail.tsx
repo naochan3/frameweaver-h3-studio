@@ -12,6 +12,7 @@ const MODE_LABEL: Record<string, string> = {
   video: '動画(MiniMax H3)',
   zimage: 'Z-Image Turbo',
   krea2: 'Krea 2 Turbo',
+  anime: 'アニメ(Illustrious)',
 }
 
 function Row({ label, value }: { label: string; value: string }) {
@@ -104,6 +105,8 @@ export function HistoryDetail() {
                   {s.durationSec !== undefined && <Row label="生成時間" value={formatDuration(s.durationSec)} />}
                   <Row label="解像度" value={`${s.width} × ${s.height}`} />
                   <Row label="ステップ数" value={String(s.steps)} />
+                  {s.cfg !== undefined && <Row label="CFG" value={s.cfg.toFixed(1)} />}
+                  {s.negativePrompt ? <Row label="ネガティブ" value={s.negativePrompt} /> : null}
                   <Row label="シード" value={s.seed === -1 ? 'ランダム' : String(s.seed)} />
                   {s.lengthSec !== undefined && <Row label="長さ" value={`${s.lengthSec}秒`} />}
                   {s.turbo !== undefined && <Row label="Turbo LoRA" value={s.turbo ? 'ON' : 'OFF'} />}

@@ -7,7 +7,14 @@ import { useGenerationStore } from '../store/generation'
 const IMAGE_MODELS: { key: ImageModel; label: string; desc: string }[] = [
   { key: 'zimage', label: 'Z-Image Turbo', desc: '導入済み・高速。アニメ〜実写まで万能' },
   { key: 'krea2', label: 'Krea 2 Turbo', desc: '実写・iPhone写真風の自然な人物に強い' },
+  { key: 'anime', label: 'アニメ (Illustrious)', desc: 'キャラ名で生成・NSFW対応。ネガティブ/cfgが効く' },
 ]
+
+/** チェックポイント一覧からアニメ(SDXL)系を優先表示。該当が無ければ全件返す */
+function animeCheckpoints(list: string[]): string[] {
+  const hit = list.filter((n) => /wai|illustrious|noobai|nova|pony|sdxl|ilv|anime|_il|vpred|v-pred/i.test(n))
+  return hit.length > 0 ? hit : list
+}
 
 
 export function ImageStudio() {
@@ -18,11 +25,13 @@ export function ImageStudio() {
   const seedRandom = useGenerationStore((s) => s.imageSeedRandom)
   const toggleSeedRandom = useGenerationStore((s) => s.toggleImageSeedRandom)
   const loraList = useGenerationStore((s) => s.loraList)
+  const checkpointList = useGenerationStore((s) => s.checkpointList)
   const status = useGenerationStore((s) => s.status)
   const error = useGenerationStore((s) => s.error)
 
   const busy = status === 'queued' || status === 'running'
   const ready = !busy && imageParams.prompt.trim().length > 0
+  const isAnime = imageParams.model === 'anime'
 
   const [aspect, setAspect] = useState<AspectRatio>('9:16')
   const [mp, setMp] = useState(1.3)
@@ -73,7 +82,7 @@ export function ImageStudio() {
           </button>
         </div>
 
-        <div className="mb-4 grid grid-cols-2 gap-3">
+        <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
           {IMAGE_MODELS.map((m) => {
             const active = imageParams.model === m.key
             return (
@@ -90,6 +99,56 @@ export function ImageStudio() {
             )
           })}
         </div>
+
+        {isAnime && (
+          <div className="mb-4 space-y-3 rounded-xl border border-pink-200 bg-pink-50/60 p-3">
+            <label className="block text-xs font-semibold text-ink-600">
+              アニメモデル(チェックポイント)
+              {animeCheckpoints(checkpointList).length > 0 ? (
+                <select
+                  value={imageParams.animeCheckpoint || ''}
+                  onChange={(e) => setImageParams({ animeCheckpoint: e.target.value })}
+                  className="mt-1 w-full rounded-lg border border-cream-200 bg-white p-2 text-sm font-normal"
+                >
+                  <option value="">おすすめ(WAI・自動)</option>
+                  {animeCheckpoints(checkpointList).map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              ) : (
+                <p className="mt-1 font-normal text-amber-600">
+                  チェックポイント未検出。DL完了後にComfyUIを再読込すると候補が並びます(WAI/NoobAI等)。
+                </p>
+              )}
+              <span className="mt-1 block font-normal text-ink-400">
+                ファイル名に「vpred」を含むモデル(NoobAI V-Pred等)は自動でv-prediction設定に切替わります。
+              </span>
+            </label>
+
+            <label className="block text-xs font-semibold text-ink-600">
+              ネガティブプロンプト(SDXL系のみ有効)
+              <textarea
+                value={imageParams.negativePrompt ?? ''}
+                onChange={(e) => setImageParams({ negativePrompt: e.target.value })}
+                placeholder="除外したい要素。空でも可"
+                className="mt-1 h-16 w-full resize-y rounded-lg border border-cream-200 bg-white p-2 text-sm font-normal leading-relaxed"
+              />
+            </label>
+
+            <label className="block text-xs font-semibold text-ink-600">
+              CFGスケール: {(imageParams.cfg ?? 6).toFixed(1)}(5〜7が目安。高いほどプロンプト忠実・硬い)
+              <input
+                type="range"
+                min={1}
+                max={12}
+                step={0.5}
+                value={imageParams.cfg ?? 6}
+                onChange={(e) => setImageParams({ cfg: Number(e.target.value) })}
+                className="mt-3 w-full accent-accent-500"
+              />
+            </label>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="text-xs font-semibold text-ink-600">
@@ -123,11 +182,11 @@ export function ImageStudio() {
           </label>
 
           <label className="text-xs font-semibold text-ink-600">
-            ステップ数: {imageParams.steps}(Turbo系は8推奨)
+            ステップ数: {imageParams.steps}({isAnime ? 'SDXLは25〜30推奨' : 'Turbo系は8推奨'})
             <input
               type="range"
-              min={4}
-              max={12}
+              min={isAnime ? 10 : 4}
+              max={isAnime ? 40 : 12}
               step={1}
               value={imageParams.steps}
               onChange={(e) => setImageParams({ steps: Number(e.target.value) })}
@@ -154,7 +213,7 @@ export function ImageStudio() {
             </datalist>
             {(() => {
               const { compatible, unknown } = selectableLoras(loraList, imageParams.model)
-              const modelLabel = imageParams.model === 'krea2' ? 'Krea 2' : 'Z-Image'
+              const modelLabel = imageParams.model === 'krea2' ? 'Krea 2' : imageParams.model === 'anime' ? 'アニメ' : 'Z-Image'
               if (compatible.length + unknown.length === 0)
                 return (
                   <p className="mt-1 font-normal text-amber-600">
@@ -180,7 +239,7 @@ export function ImageStudio() {
                   )
                 return (
                   <p className="mt-1 font-semibold text-red-600">
-                    警告: {info.note}。{imageParams.model === 'krea2' ? 'Krea 2' : 'Z-Image'} では効きません。
+                    警告: {info.note}。{imageParams.model === 'krea2' ? 'Krea 2' : imageParams.model === 'anime' ? 'アニメ' : 'Z-Image'} では効きません。
                   </p>
                 )
               })()}

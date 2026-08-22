@@ -36,6 +36,9 @@ export interface HistoryItem {
     seed: number
     extraLora?: string
     extraLoraStrength?: number
+    // アニメ(SDXL)のみ
+    cfg?: number
+    negativePrompt?: string
     // 動画のみ
     lengthSec?: number
     turbo?: boolean
@@ -70,8 +73,10 @@ interface GenerationState {
   resultKind: OutputKind
   error: string | null
   history: HistoryItem[]
-  /** RECENTの分類タブ('video'=MiniMax H3 / 'zimage' / 'krea2') */
-  historyTab: 'video' | 'zimage' | 'krea2'
+  /** RECENTの分類タブ('video'=MiniMax H3 / 'zimage' / 'krea2' / 'anime') */
+  historyTab: 'video' | 'zimage' | 'krea2' | 'anime'
+  /** ComfyUI 上で選択可能なチェックポイント一覧(アニメモデル選択用) */
+  checkpointList: string[]
   /** 選択中タブのフォルダから読み込んだ過去生成一覧 */
   folderItems: HistoryItem[]
   folderLoading: boolean
@@ -114,7 +119,7 @@ interface GenerationState {
   /** 出力フォルダをエクスプローラーで開く('' / video / zimage / krea2) */
   openOutputFolder: (subdir: string) => Promise<void>
   /** RECENTの分類タブを切り替え、そのフォルダを読み込む */
-  setHistoryTab: (tab: 'video' | 'zimage' | 'krea2') => void
+  setHistoryTab: (tab: 'video' | 'zimage' | 'krea2' | 'anime') => void
   /** 選択中タブのフォルダを再読み込みする */
   reloadFolder: () => Promise<void>
   clearHistory: () => void
@@ -164,6 +169,7 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
     extraLoraStrength: 1.0,
   },
   loraList: [],
+  checkpointList: [],
   sources: [],
   status: 'idle',
   progress: null,
@@ -189,6 +195,9 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
     seed: randomSeed(),
     extraLora: '',
     extraLoraStrength: 1.0,
+    negativePrompt: '',
+    cfg: 6,
+    animeCheckpoint: '',
   },
 
   guideOpen: localStorage.getItem('frameweaver-guide-seen') !== '1',
@@ -330,7 +339,7 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
         imageSeedRandom: s ? false : state.imageSeedRandom,
         imageParams: {
           ...state.imageParams,
-          model: item.mode === 'krea2' ? 'krea2' : 'zimage',
+          model: item.mode === 'krea2' ? 'krea2' : item.mode === 'anime' ? 'anime' : 'zimage',
           prompt: item.prompt,
           ...(s && {
             width: s.width,
@@ -339,6 +348,10 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
             seed: s.seed,
             extraLora: s.extraLora ?? '',
             extraLoraStrength: s.extraLoraStrength ?? 1.0,
+            ...(item.mode === 'anime' && {
+              cfg: s.cfg ?? 6,
+              negativePrompt: s.negativePrompt ?? '',
+            }),
           }),
         },
       }))
@@ -478,12 +491,16 @@ async function handleDone(promptId: string) {
             seed: imageParams.seed,
             extraLora: imageParams.extraLora,
             extraLoraStrength: imageParams.extraLoraStrength,
+            ...(imageParams.model === 'anime' && {
+              cfg: imageParams.cfg,
+              negativePrompt: imageParams.negativePrompt,
+            }),
             durationSec,
           },
   }
   const newHistory = [item, ...history]
   saveHistory(newHistory)
-  const subdir: 'video' | 'zimage' | 'krea2' = currentKind === 'video' ? 'video' : imageParams.model
+  const subdir: 'video' | 'zimage' | 'krea2' | 'anime' = currentKind === 'video' ? 'video' : imageParams.model
   useGenerationStore.setState({
     status: 'done',
     videoUrl: url,
@@ -503,6 +520,7 @@ client.onEvent((ev) => {
       if (ev.message === 'connected') {
         useGenerationStore.setState({ connected: true })
         void client.getLoraList().then((loraList) => useGenerationStore.setState({ loraList }))
+        void client.getCheckpointList().then((checkpointList) => useGenerationStore.setState({ checkpointList }))
         void useGenerationStore.getState().reloadFolder()
       }
       if (ev.message === 'disconnected') useGenerationStore.setState({ connected: false })

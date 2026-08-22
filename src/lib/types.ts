@@ -29,8 +29,9 @@ export interface ApiNode {
 
 export type WorkflowJson = Record<string, ApiNode>
 
-/** 画像生成モデル */
-export type ImageModel = 'zimage' | 'krea2'
+/** 画像生成モデル。zimage/krea2=Turbo実写系(cfg=1固定・ネガティブ無効) /
+ * anime=Illustrious系SDXLチェックポイント(cfg・ネガティブ有効、キャラ名で生成) */
+export type ImageModel = 'zimage' | 'krea2' | 'anime'
 
 export interface ImageParams {
   model: ImageModel
@@ -43,6 +44,13 @@ export interface ImageParams {
   /** 追加LoRA(キャラ/画風LoRA。loras フォルダからの相対パス)。空文字で未使用 */
   extraLora: string
   extraLoraStrength: number
+  // ↓ anime(SDXL系)専用。zimage/krea2 では未使用(cfgは内部で1.0固定)
+  /** ネガティブプロンプト(SDXL系のみ有効) */
+  negativePrompt?: string
+  /** CFGスケール(SDXL系のみ。zimage/krea2は常に1.0) */
+  cfg?: number
+  /** アニメ用チェックポイントのファイル名(checkpoints フォルダ) */
+  animeCheckpoint?: string
 }
 
 export const MODEL_FILES = {
@@ -63,4 +71,6 @@ export const MODEL_FILES = {
   krea2Unet: 'krea2_turbo_fp8_scaled.safetensors',
   krea2Clip: 'qwen3vl_4b_fp8_scaled.safetensors',
   krea2Vae: 'qwen_image_vae.safetensors',
+  // 画像生成: アニメ(Illustrious系SDXLチェックポイント)。既定はWAI(設定不要で即動く)
+  animeCheckpointDefault: 'waiIllustriousSDXL_v170.safetensors',
 } as const

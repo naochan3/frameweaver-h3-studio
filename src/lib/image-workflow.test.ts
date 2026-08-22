@@ -73,6 +73,48 @@ describe('buildImageWorkflow: Z-Image Turbo', () => {
   })
 })
 
+describe('buildImageWorkflow: アニメ(Illustrious系SDXL)', () => {
+  const anime: ImageParams = { ...base, model: 'anime', negativePrompt: 'bad hands', cfg: 6, steps: 28 }
+
+  it('CheckpointLoaderSimple + 実ネガティブ + cfg>1 の構成', () => {
+    const wf = buildImageWorkflow(anime)
+    expect(wf['ckpt'].class_type).toBe('CheckpointLoaderSimple')
+    expect(wf['ckpt'].inputs['ckpt_name']).toBe(MODEL_FILES.animeCheckpointDefault)
+    expect(wf['positive'].inputs['text']).toBe('テスト')
+    expect(wf['negative'].class_type).toBe('CLIPTextEncode')
+    expect(wf['negative'].inputs['text']).toBe('bad hands')
+    expect(wf['sampler'].inputs['cfg']).toBe(6)
+    expect(wf['sampler'].inputs['sampler_name']).toBe('euler_ancestral')
+    expect(wf['sampler'].inputs['scheduler']).toBe('normal')
+    expect(wf['latent'].class_type).toBe('EmptyLatentImage')
+    expect(wf['decode'].inputs['vae']).toEqual(['ckpt', 2])
+    expect(wf['save'].inputs['filename_prefix']).toBe('anime/FrameWeaver')
+    expect(wf['modelsampling']).toBeUndefined()
+  })
+
+  it('指定チェックポイントが使われる', () => {
+    const wf = buildImageWorkflow({ ...anime, animeCheckpoint: 'MyAnime.safetensors' })
+    expect(wf['ckpt'].inputs['ckpt_name']).toBe('MyAnime.safetensors')
+  })
+
+  it('V-Pred版は ModelSamplingDiscrete(v_prediction)を挟み euler になる', () => {
+    const wf = buildImageWorkflow({ ...anime, animeCheckpoint: 'NoobAI-XL-Vpred-v1.0.safetensors' })
+    expect(wf['modelsampling'].class_type).toBe('ModelSamplingDiscrete')
+    expect(wf['modelsampling'].inputs['sampling']).toBe('v_prediction')
+    expect(wf['modelsampling'].inputs['zsnr']).toBe(true)
+    expect(wf['sampler'].inputs['model']).toEqual(['modelsampling', 0])
+    expect(wf['sampler'].inputs['sampler_name']).toBe('euler')
+  })
+
+  it('追加LoRAは LoraLoader(model+clip)で挟まる', () => {
+    const wf = buildImageWorkflow({ ...anime, extraLora: 'char.safetensors', extraLoraStrength: 0.8 })
+    expect(wf['lora_extra'].class_type).toBe('LoraLoader')
+    expect(wf['lora_extra'].inputs['strength_clip']).toBe(0.8)
+    expect(wf['positive'].inputs['clip']).toEqual(['lora_extra', 1])
+    expect(wf['sampler'].inputs['model']).toEqual(['lora_extra', 0])
+  })
+})
+
 describe('buildImageWorkflow: Krea 2 Turbo', () => {
   it('Krea 2 は公式テンプレ準拠(type=krea2 / EmptyLatentImage / euler / AuraFlowなし)', () => {
     const wf = buildImageWorkflow({ ...base, model: 'krea2' })

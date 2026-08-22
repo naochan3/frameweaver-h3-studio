@@ -1,7 +1,7 @@
 /** LoRAの適用対象。LoRAは学習元モデル専用で、別モデルに入れても効かない(または壊れる)。
- * video=MiniMax H3 / zimage=Z-Image Turbo / krea2=Krea 2 Turbo /
+ * video=MiniMax H3 / zimage=Z-Image Turbo / krea2=Krea 2 Turbo / anime=Illustrious系SDXL /
  * system=Turbo等の自動適用(手動選択の対象外) / unsupported=本スタジオ未対応モデル用 / unknown=判別不能 */
-export type LoraTarget = 'video' | 'zimage' | 'krea2' | 'system' | 'unsupported' | 'unknown'
+export type LoraTarget = 'video' | 'zimage' | 'krea2' | 'anime' | 'system' | 'unsupported' | 'unknown'
 
 export interface LoraInfo {
   target: LoraTarget
@@ -47,15 +47,28 @@ const CATALOG: Record<string, LoraInfo> = {
   },
 }
 
-/** ファイル名からLoRAの適用対象と説明を返す。カタログ優先、なければ命名規則から推定 */
+/** ファイル名からLoRAの適用対象と説明を返す。カタログ優先、なければ
+ * DL時のフォルダ接頭辞(loras/<base>/)→命名規則の順で推定 */
 export function classifyLora(name: string): LoraInfo {
   const base = name.split(/[\\/]/).pop() ?? name
   const hit = CATALOG[base]
   if (hit) return hit
 
+  // 自動DLでベースモデル別サブフォルダに振り分けているので、パス接頭辞が最も確実
+  const dir = name.toLowerCase().replace(/\\/g, '/')
+  if (/^(illustrious|noobai|pony|sdxl\d*|sdxl)\//.test(dir))
+    return { target: 'anime', note: 'アニメ(Illustrious系SDXL)用のキャラ・画風LoRA' }
+  if (/^(zimageturbo|zimage)\//.test(dir)) return { target: 'zimage', note: 'Z-Image用のキャラ・画風LoRA' }
+  if (/^(krea2|krea_2)\//.test(dir)) return { target: 'krea2', note: 'Krea 2用のキャラ・画風LoRA' }
+  if (/^qwen\//.test(dir)) return { target: 'krea2', note: 'Qwen-Image系LoRA(Krea 2で動く場合あり・未保証)' }
+
   const n = base.toLowerCase()
-  if (/wan\s*2|hunyuan|sdxl|flux/.test(n)) {
+  // アニメ系SDXL(本スタジオはアニメモデルに対応)。wan/hunyuan/flux のみ未対応
+  if (/wan\s*2|hunyuan|flux/.test(n)) {
     return { target: 'unsupported', note: '本スタジオ未対応モデル用のLoRA(選択しても効かない)' }
+  }
+  if (/illustrious|noobai|pony|sdxl/.test(n)) {
+    return { target: 'anime', note: 'アニメ(Illustrious系SDXL)用のキャラ・画風LoRA' }
   }
   if (n.includes('minimax') || n.includes('_h3_') || n.startsWith('h3_')) {
     if (n.includes('turbo')) {
@@ -76,7 +89,7 @@ export function classifyLora(name: string): LoraInfo {
  * システムLoRA・未対応モデル用・他モデル用は候補に出さない(誤選択で「効かない」事故を防ぐ) */
 export function selectableLoras(
   list: string[],
-  target: 'video' | 'zimage' | 'krea2',
+  target: 'video' | 'zimage' | 'krea2' | 'anime',
 ): { compatible: string[]; unknown: string[] } {
   const compatible: string[] = []
   const unknown: string[] = []
