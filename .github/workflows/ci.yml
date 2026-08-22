@@ -56,8 +56,6 @@ jobs:
           cargo audit --ignore RUSTSEC-2023-0071
 
       - name: PowerShell contracts
-        shell: pwsh
+        shell: powershell
         run: |
-          Install-Module Pester -RequiredVersion 3.4.0 -Scope CurrentUser -Force -SkipPublisherCheck
-          Import-Module Pester -RequiredVersion 3.4.0 -Force
           Invoke-Pester -Path './scripts/tests' -EnableExit
