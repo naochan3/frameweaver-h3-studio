@@ -1,0 +1,71 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main, 'feat/**']
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy,rustfmt
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Frontend unit, lint, and build
+        run: |
+          npm test
+          npm run lint
+          npm run build
+          npm audit --audit-level=high
+
+      - name: Browser E2E
+        run: |
+          npx playwright install chromium
+          npm run test:e2e
+
+      - name: Rust checks
+        working-directory: frameweaverd
+        run: |
+          cargo fmt --check
+          cargo clippy --all-targets -- -D warnings
+          cargo test --locked
+
+      - name: Rust advisory audit
+        working-directory: frameweaverd
+        shell: pwsh
+        run: |
+          cargo install cargo-audit --locked
+          # SQLx's macro metadata locks an unused MySQL/RSA package. `cargo tree -i rsa`
+          # is empty for every build target; RUSTSEC-2023-0071 has no patched release.
+          cargo audit --ignore RUSTSEC-2023-0071
+
+      - name: PowerShell contracts
+        shell: powershell
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP 'Pester.3.4.0.zip'
+          $module = Join-Path $env:RUNNER_TEMP 'Pester.3.4.0'
+          Invoke-WebRequest -UseBasicParsing -Uri 'https://www.powershellgallery.com/api/v2/package/Pester/3.4.0' -OutFile $archive -TimeoutSec 60
+          $actual = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash
+          if ($actual -ne '31928EE77B88BC7EFFB6F32AB206A05E5B269C1F7F3F18B6AD49936111ECF589') {
+            throw "Pester package hash mismatch: $actual"
+          }
+          Expand-Archive -LiteralPath $archive -DestinationPath $module
+          Remove-Module Pester -Force -ErrorAction SilentlyContinue
+          Import-Module (Join-Path $module 'Pester.psd1') -Force
+          Invoke-Pester -Path './scripts/tests' -EnableExit

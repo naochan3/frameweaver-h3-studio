@@ -1,4 +1,5 @@
 import { imageSlots, useGenerationStore } from '../store/generation'
+import { WorkerSelector } from './WorkerSelector'
 
 /** 画面下部に常時固定される生成バー。スクロール位置に関係なくいつでも生成できる。 */
 export function GenerateBar() {
@@ -30,8 +31,9 @@ export function GenerateBar() {
       : 'この内容で画像を生成'
 
   return (
-    <div className="sticky bottom-0 z-30 border-t border-cream-200 bg-white/90 px-4 py-3 backdrop-blur">
+    <div className="generate-bar fixed inset-x-0 bottom-0 z-30 border-t border-cream-200 bg-white/90 px-4 py-3 backdrop-blur">
       <div className="mx-auto flex max-w-[1600px] items-center gap-4">
+        <WorkerSelector />
         <div className="min-w-0 flex-1">
           <p className="truncate text-xs text-ink-600">
             <span className="font-bold text-ink-900">{isVideo ? '動画生成' : '画像生成'}</span>
@@ -50,7 +52,7 @@ export function GenerateBar() {
         {busy ? (
           <button
             onClick={() => void stop()}
-            className="shrink-0 rounded-xl border border-red-200 bg-red-50 px-6 py-3 text-sm font-bold text-red-600 hover:bg-red-100"
+            className="min-h-11 shrink-0 rounded-xl border border-red-200 bg-red-50 px-6 py-3 text-sm font-bold text-red-600 hover:bg-red-100"
           >
             ■ 停止
           </button>
@@ -58,7 +60,7 @@ export function GenerateBar() {
           <button
             onClick={() => void (isVideo ? generate() : generateImage())}
             disabled={!ready}
-            className="shrink-0 rounded-xl bg-accent-500 px-4 py-3 text-sm font-bold text-white shadow-lg transition-colors hover:bg-accent-600 disabled:cursor-not-allowed disabled:bg-cream-200 disabled:text-ink-400 sm:px-8"
+            className="min-h-11 shrink-0 rounded-xl bg-accent-500 px-4 py-3 text-sm font-bold text-white shadow-lg transition-colors hover:bg-accent-600 disabled:cursor-not-allowed disabled:bg-cream-200 disabled:text-ink-400 sm:px-8"
           >
             <span className="sm:hidden">{isVideo ? '動画生成' : '画像生成'} →</span>
             <span className="hidden sm:inline">{label} →</span>
