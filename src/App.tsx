@@ -10,6 +10,7 @@ import { ImageStudio } from './components/ImageStudio'
 import { GuideOverlay } from './components/GuideOverlay'
 import { GenerateBar } from './components/GenerateBar'
 import { HistoryDetail } from './components/HistoryDetail'
+import { LoraCatalog } from './components/LoraCatalog'
 import { useGenerationStore } from './store/generation'
 
 export default function App() {
@@ -45,6 +46,7 @@ export default function App() {
       </footer>
       <GuideOverlay />
       <HistoryDetail />
+      <LoraCatalog />
     </div>
   )
 }

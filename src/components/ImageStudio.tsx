@@ -28,6 +28,7 @@ export function ImageStudio() {
   const loraList = useGenerationStore((s) => s.loraList)
   const checkpointList = useGenerationStore((s) => s.checkpointList)
   const loraMeta = useGenerationStore((s) => s.loraMeta)
+  const setLoraCatalogOpen = useGenerationStore((s) => s.setLoraCatalogOpen)
   const status = useGenerationStore((s) => s.status)
   const error = useGenerationStore((s) => s.error)
 
@@ -243,7 +244,16 @@ export function ImageStudio() {
           </label>
 
           <label className="sm:col-span-2 text-xs font-semibold text-ink-600">
-            追加LoRA(キャラ・画風LoRA・任意)
+            <span className="flex items-center justify-between">
+              追加LoRA(キャラ・画風LoRA・任意)
+              <button
+                type="button"
+                onClick={() => setLoraCatalogOpen(true)}
+                className="rounded-lg border border-accent-300 bg-white px-2.5 py-1 text-xs font-bold text-accent-600 hover:bg-accent-50"
+              >
+                LoRAカタログを開く(画像で選ぶ)
+              </button>
+            </span>
             <input
               list="lora-list-image"
               value={imageParams.extraLora}

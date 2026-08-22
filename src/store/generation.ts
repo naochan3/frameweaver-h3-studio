@@ -3,6 +3,7 @@ import { ComfyClient } from '../lib/comfy-client'
 import { DRAFT_KEYS, loadDraft, saveDraft } from '../lib/draft'
 import { pickHistoryMatch } from '../lib/history-match'
 import { buildImageWorkflow } from '../lib/image-workflow'
+import { classifyLora } from '../lib/lora'
 import { imageRecommendedParams, videoRecommendedParams } from '../lib/presets'
 import { randomSeed } from '../lib/seed'
 import { patchWorkflow } from '../lib/workflow-patcher'
@@ -87,6 +88,8 @@ interface GenerationState {
   imageParams: ImageParams
   /** 使い方ガイドの表示状態(初回訪問時は自動表示) */
   guideOpen: boolean
+  /** LoRAカタログ(サムネ付き一覧)の表示状態 */
+  loraCatalogOpen: boolean
   /** シードを生成ごとにランダムにするか(動画/画像それぞれ) */
   videoSeedRandom: boolean
   imageSeedRandom: boolean
@@ -94,6 +97,11 @@ interface GenerationState {
   toggleVideoSeedRandom: () => void
   toggleImageSeedRandom: () => void
   setGuideOpen: (open: boolean) => void
+  setLoraCatalogOpen: (open: boolean) => void
+  /** LoRAメタを再取得する(DL進行中に最新化) */
+  refreshLoraMeta: () => Promise<void>
+  /** カタログからLoRAを選択: 対象モデルへ自動切替し、追加LoRAに設定する */
+  applyLoraFromCatalog: (metaKey: string) => void
   setAppTab: (tab: 'video' | 'image') => void
   setImageParams: (patch: Partial<ImageParams>) => void
   /** 画像モデルを切り替え、そのモデルの推奨値(steps/解像度)も適用する */
@@ -204,6 +212,7 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
   },
 
   guideOpen: localStorage.getItem('frameweaver-guide-seen') !== '1',
+  loraCatalogOpen: false,
   videoSeedRandom: true,
   imageSeedRandom: true,
 
@@ -213,6 +222,34 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
   setGuideOpen: (open) => {
     if (!open) localStorage.setItem('frameweaver-guide-seen', '1')
     set({ guideOpen: open })
+  },
+
+  setLoraCatalogOpen: (open) => {
+    set({ loraCatalogOpen: open })
+    if (open) void get().refreshLoraMeta()
+  },
+
+  refreshLoraMeta: async () => {
+    const [loraMeta, loraList] = await Promise.all([client.getLoraMeta(), client.getLoraList()])
+    set({ loraMeta, loraList })
+  },
+
+  applyLoraFromCatalog: (metaKey) => {
+    const { loraList } = get()
+    // ComfyUIのLoRA名(Windowsは "\" 区切り)を、メタキー("/" 区切り)から解決
+    const comfyName = loraList.find((n) => n.replace(/\\/g, '/') === metaKey) ?? metaKey
+    const target = classifyLora(metaKey).target // 対象モデル(anime/zimage/krea2 等)
+    set((s) => {
+      const nextModel: ImageModel =
+        target === 'anime' || target === 'zimage' || target === 'krea2' ? target : s.imageParams.model
+      // モデルが変わる場合は推奨値も適用しつつ、LoRAを設定
+      const base = nextModel !== s.imageParams.model ? imageRecommendedParams(nextModel) : {}
+      return {
+        appTab: 'image',
+        loraCatalogOpen: false,
+        imageParams: { ...s.imageParams, ...base, model: nextModel, extraLora: comfyName, extraLoraStrength: 1.0 },
+      }
+    })
   },
 
   setAppTab: (tab) => set({ appTab: tab }),

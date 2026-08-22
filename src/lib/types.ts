@@ -30,6 +30,10 @@ export interface LoraMetaEntry {
   nsfw: boolean
   url: string
   desc: string
+  /** Civitaiのプレビュー画像URL(サムネ表示用・任意) */
+  image?: string
+  /** 推奨強度の目安(任意) */
+  strength?: number
 }
 export type LoraMetaMap = Record<string, LoraMetaEntry>
 
