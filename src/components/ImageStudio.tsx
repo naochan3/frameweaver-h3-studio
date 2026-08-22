@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { classifyLora, selectableLoras } from '../lib/lora'
+import { IMAGE_RECOMMENDED } from '../lib/presets'
 import { ASPECT_OPTIONS, IMAGE_MP_OPTIONS, computeResolution, type AspectRatio } from '../lib/resolution'
 import type { ImageModel } from '../lib/types'
 import { useGenerationStore } from '../store/generation'
@@ -42,8 +43,14 @@ export function ImageStudio() {
   }
   const resetRecommended = () => {
     setAspect('9:16')
-    setMp(1.3)
+    setMp(IMAGE_RECOMMENDED[imageParams.model].mp)
     resetImageRecommended()
+  }
+  // モデル切替: ストア側の推奨値適用に加え、解像度セレクタのローカル表示も同期させる
+  const switchModel = (model: ImageModel) => {
+    setImageModel(model)
+    setAspect('9:16')
+    setMp(IMAGE_RECOMMENDED[model].mp)
   }
 
   return (
@@ -88,7 +95,7 @@ export function ImageStudio() {
             return (
               <button
                 key={m.key}
-                onClick={() => setImageModel(m.key)}
+                onClick={() => switchModel(m.key)}
                 className={`rounded-xl border-2 p-3 text-left transition-colors ${
                   active ? 'border-accent-500 bg-orange-50' : 'border-cream-200 hover:border-accent-400'
                 }`}

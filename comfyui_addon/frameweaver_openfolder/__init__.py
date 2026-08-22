@@ -14,7 +14,7 @@ COMFY_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__f
 OUTPUT_ROOT = os.path.join(COMFY_ROOT, "output")
 
 # 開いてよいサブフォルダ(任意の絶対パスは開かせない)
-ALLOWED_SUBDIRS = {"", "video", "zimage", "krea2"}
+ALLOWED_SUBDIRS = {"", "video", "zimage", "krea2", "anime"}
 
 
 @PromptServer.instance.routes.post("/frameweaver/open_output")
