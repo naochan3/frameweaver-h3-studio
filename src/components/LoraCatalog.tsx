@@ -12,6 +12,11 @@ const GENRE_INFO: Record<string, string> = {
   その他: '',
 }
 
+/** Civitai画像URLを軽いサムネ(幅300)に変換。'/original=true/' や '/width=N/' を置換 */
+function thumb(url: string): string {
+  return url.replace(/\/(original=true|width=\d+)\//, '/width=300/')
+}
+
 /** ベースモデルの日本語ラベル(どのモデルで使えるか) */
 const BASE_LABEL: Record<string, string> = {
   illustrious: 'アニメ(Illustrious)',
@@ -98,12 +103,18 @@ export function LoraCatalog() {
             LoRAのメタ情報がまだありません。ダウンロードが進むと自動で並びます。
           </p>
         ) : (
-          <div className="grid flex-1 grid-cols-2 gap-3 overflow-y-auto p-3 sm:grid-cols-3 lg:grid-cols-4">
+          <div className="grid flex-1 auto-rows-max grid-cols-2 content-start gap-3 overflow-y-auto p-3 sm:grid-cols-3 lg:grid-cols-4">
             {filtered.map(([key, v]) => (
               <div key={key} className="flex flex-col overflow-hidden rounded-xl border border-cream-200 bg-white">
-                <div className="relative aspect-[3/4] bg-cream-100">
+                <div className="relative h-44 shrink-0 overflow-hidden bg-cream-100 sm:h-52">
                   {v.image ? (
-                    <img src={v.image} alt={v.name} loading="lazy" className="h-full w-full object-cover" />
+                    <img
+                      src={thumb(v.image)}
+                      alt={v.name}
+                      loading="lazy"
+                      decoding="async"
+                      className="h-full w-full object-cover"
+                    />
                   ) : (
                     <div className="flex h-full items-center justify-center text-xs text-ink-400">画像なし</div>
                   )}
