@@ -2,6 +2,7 @@ $scriptPath = Join-Path $PSScriptRoot '..\Measure-ComfyIdleResources.ps1'
 
 Describe 'Measure-ComfyIdleResources' {
     BeforeEach {
+        function global:nvidia-smi.exe { throw 'unmocked nvidia-smi invocation' }
         Mock nvidia-smi.exe {
             $global:LASTEXITCODE = 0
             '0, Test GPU, 1024, 8192, 0, 12.5, 40, P8'
@@ -15,6 +16,10 @@ Describe 'Measure-ComfyIdleResources' {
         }
         Mock Get-Process { @() }
         Mock Start-Sleep {}
+    }
+
+    AfterEach {
+        Remove-Item Function:\global:nvidia-smi.exe -ErrorAction SilentlyContinue
     }
 
     It 'emits a bounded schema without command lines, prompts, or environment values' {
