@@ -27,12 +27,23 @@ export function ImageStudio() {
   const toggleSeedRandom = useGenerationStore((s) => s.toggleImageSeedRandom)
   const loraList = useGenerationStore((s) => s.loraList)
   const checkpointList = useGenerationStore((s) => s.checkpointList)
+  const loraMeta = useGenerationStore((s) => s.loraMeta)
   const status = useGenerationStore((s) => s.status)
   const error = useGenerationStore((s) => s.error)
 
   const busy = status === 'queued' || status === 'running'
   const ready = !busy && imageParams.prompt.trim().length > 0
   const isAnime = imageParams.model === 'anime'
+
+  // 選択中LoRAの説明(Civitai由来)。ComfyUIはWindowsで "\" 区切り、メタキーは "/" なので正規化
+  const metaOf = (name: string) => loraMeta[name.trim().replace(/\\/g, '/')]
+  const selectedLoraMeta = metaOf(imageParams.extraLora)
+  // プロンプト末尾に語句を追記(重複は避ける)
+  const appendToPrompt = (text: string) => {
+    const cur = imageParams.prompt
+    if (cur.includes(text)) return
+    setImageParams({ prompt: cur ? `${cur.replace(/\s*,?\s*$/, '')}, ${text}` : text })
+  }
 
   const [aspect, setAspect] = useState<AspectRatio>('9:16')
   const [mp, setMp] = useState(1.3)
@@ -109,6 +120,36 @@ export function ImageStudio() {
 
         {isAnime && (
           <div className="mb-4 space-y-3 rounded-xl border border-pink-200 bg-pink-50/60 p-3">
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-ink-700">
+              <p className="font-bold text-amber-700">⚠ キャラは英語のDanbooruタグで入力してください</p>
+              <p className="mt-1 leading-relaxed">
+                日本語名(例「ロキシー」)や自然文では<b>別人</b>になります。英語の公式タグが必要です。
+                作品名を <code className="rounded bg-white px-1">\(series\)</code> の形で添えると精度が上がります。
+              </p>
+              <p className="mt-1.5 font-semibold">検証済みの例(クリックで挿入):</p>
+              <div className="mt-1 flex flex-wrap gap-1.5">
+                {['hatsune miku', 'roxy migurdia \\(mushoku tensei\\)', 'frieren \\(sousou no frieren\\)'].map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => appendToPrompt(t)}
+                    className="rounded-full border border-accent-300 bg-white px-2.5 py-1 font-mono text-[11px] text-accent-600 hover:bg-accent-50"
+                  >
+                    + {t}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-1.5 leading-relaxed text-ink-500">
+                他のキャラのタグは <b>danbooru.donmai.us</b> でキャラを検索し、左側のタグ名(英語)をコピーしてください。
+                <button
+                  type="button"
+                  onClick={() => appendToPrompt('masterpiece, best quality, amazing quality, very aesthetic')}
+                  className="ml-1 rounded border border-cream-300 bg-white px-2 py-0.5 font-semibold text-ink-600 hover:bg-cream-100"
+                >
+                  + 品質タグを先頭級に追加
+                </button>
+              </p>
+            </div>
             <label className="block text-xs font-semibold text-ink-600">
               アニメモデル(チェックポイント)
               {animeCheckpoints(checkpointList).length > 0 ? (
@@ -213,9 +254,13 @@ export function ImageStudio() {
             <datalist id="lora-list-image">
               {(() => {
                 const { compatible, unknown } = selectableLoras(loraList, imageParams.model)
-                return [...compatible, ...unknown].map((name) => (
-                  <option key={name} value={name} label={classifyLora(name).note} />
-                ))
+                return [...compatible, ...unknown].map((name) => {
+                  const m = metaOf(name)
+                  const label = m
+                    ? `${m.name}${m.nsfw ? ' [NSFW]' : ''} — ${m.genre}${m.triggers.length ? ' / trig: ' + m.triggers.join(' ') : ''}`
+                    : classifyLora(name).note
+                  return <option key={name} value={name} label={label} />
+                })
               })()}
             </datalist>
             {(() => {
@@ -251,6 +296,41 @@ export function ImageStudio() {
                 )
               })()}
           </label>
+
+          {selectedLoraMeta && (
+            <div className="sm:col-span-2 rounded-xl border border-accent-200 bg-orange-50/60 p-3 text-xs">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="font-bold text-ink-900">{selectedLoraMeta.name}</p>
+                  <p className="mt-0.5 text-ink-400">
+                    {selectedLoraMeta.base} / {selectedLoraMeta.genre}
+                    {selectedLoraMeta.nsfw && <span className="ml-1 rounded bg-pink-100 px-1 font-bold text-pink-600">NSFW</span>}
+                  </p>
+                </div>
+                <a href={selectedLoraMeta.url} target="_blank" rel="noreferrer" className="shrink-0 rounded border border-cream-200 bg-white px-2 py-0.5 font-semibold text-ink-600 hover:bg-cream-100">
+                  Civitai ↗
+                </a>
+              </div>
+              {selectedLoraMeta.triggers.length > 0 && (
+                <div className="mt-2">
+                  <span className="font-semibold text-ink-600">トリガー(入れないと効きません):</span>
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                    {selectedLoraMeta.triggers.map((t) => (
+                      <code key={t} className="rounded bg-white px-1.5 py-0.5 font-mono text-[11px] text-accent-600">{t}</code>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => appendToPrompt(selectedLoraMeta.triggers.join(', '))}
+                      className="rounded-full border border-accent-300 bg-white px-2.5 py-1 font-semibold text-accent-600 hover:bg-accent-50"
+                    >
+                      + プロンプトに挿入
+                    </button>
+                  </div>
+                </div>
+              )}
+              {selectedLoraMeta.desc && <p className="mt-2 leading-relaxed text-ink-500">{selectedLoraMeta.desc}</p>}
+            </div>
+          )}
 
           {imageParams.extraLora.trim() && (
             <label className="sm:col-span-2 text-xs font-semibold text-ink-600">

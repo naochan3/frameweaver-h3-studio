@@ -1,4 +1,4 @@
-import type { WorkflowJson } from './types'
+import type { LoraMetaMap, WorkflowJson } from './types'
 
 export interface ProgressEvent {
   type: 'status' | 'progress' | 'executing' | 'executed' | 'error' | 'preview'
@@ -234,6 +234,18 @@ export class ComfyClient {
       return json['LoraLoaderModelOnly']?.input?.required?.lora_name?.[0] ?? []
     } catch {
       return []
+    }
+  }
+
+  /** Civitai由来のLoRA説明メタ(名前・トリガー・ジャンル等)を取得 */
+  async getLoraMeta(): Promise<LoraMetaMap> {
+    try {
+      const res = await fetch(`${this.baseUrl}/frameweaver/lora_meta`)
+      if (!res.ok) return {}
+      const json = (await res.json()) as { meta?: LoraMetaMap }
+      return json.meta ?? {}
+    } catch {
+      return {}
     }
   }
 

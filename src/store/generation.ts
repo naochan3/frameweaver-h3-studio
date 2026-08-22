@@ -6,7 +6,7 @@ import { buildImageWorkflow } from '../lib/image-workflow'
 import { imageRecommendedParams, videoRecommendedParams } from '../lib/presets'
 import { randomSeed } from '../lib/seed'
 import { patchWorkflow } from '../lib/workflow-patcher'
-import type { GenerationMode, GenerationParams, ImageModel, ImageParams } from '../lib/types'
+import type { GenerationMode, GenerationParams, ImageModel, ImageParams, LoraMetaMap } from '../lib/types'
 
 // 既定は同一オリジンの /comfy(Viteプロキシ経由)。これによりPCでもLAN内の別端末でも
 // 「開いているページと同じホスト」にアクセスするだけでComfyUIに繋がる。
@@ -77,6 +77,8 @@ interface GenerationState {
   historyTab: 'video' | 'zimage' | 'krea2' | 'anime'
   /** ComfyUI 上で選択可能なチェックポイント一覧(アニメモデル選択用) */
   checkpointList: string[]
+  /** Civitai由来のLoRA説明メタ(選択時の説明・トリガー表示用) */
+  loraMeta: LoraMetaMap
   /** 選択中タブのフォルダから読み込んだ過去生成一覧 */
   folderItems: HistoryItem[]
   folderLoading: boolean
@@ -170,6 +172,7 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
   },
   loraList: [],
   checkpointList: [],
+  loraMeta: {},
   sources: [],
   status: 'idle',
   progress: null,
@@ -521,6 +524,7 @@ client.onEvent((ev) => {
         useGenerationStore.setState({ connected: true })
         void client.getLoraList().then((loraList) => useGenerationStore.setState({ loraList }))
         void client.getCheckpointList().then((checkpointList) => useGenerationStore.setState({ checkpointList }))
+        void client.getLoraMeta().then((loraMeta) => useGenerationStore.setState({ loraMeta }))
         void useGenerationStore.getState().reloadFolder()
       }
       if (ev.message === 'disconnected') useGenerationStore.setState({ connected: false })

@@ -1,11 +1,14 @@
 """FrameWeaver 用の最小API拡張。
 出力フォルダを Windows のエクスプローラーで開く。localhost からの POST のみ想定。
 """
+import json
 import os
 import subprocess
 
 from aiohttp import web
 from server import PromptServer
+
+import folder_paths
 
 from .metadata import extract_prompt
 
@@ -78,6 +81,20 @@ async def list_output(request: web.Request) -> web.Response:
     return web.json_response({"ok": True, "subdir": subdir, "files": files})
 
 
+@PromptServer.instance.routes.get("/frameweaver/lora_meta")
+async def lora_meta(request: web.Request) -> web.Response:
+    """loras フォルダの frameweaver_lora_meta.json(Civitai由来のLoRA説明)を返す。"""
+    try:
+        for d in folder_paths.get_folder_paths("loras"):
+            p = os.path.join(d, "frameweaver_lora_meta.json")
+            if os.path.isfile(p):
+                with open(p, "r", encoding="utf-8") as f:
+                    return web.json_response({"ok": True, "meta": json.load(f)})
+        return web.json_response({"ok": True, "meta": {}})
+    except Exception as e:  # noqa: BLE001
+        return web.json_response({"ok": False, "error": str(e), "meta": {}}, status=500)
+
+
 NODE_CLASS_MAPPINGS = {}
 NODE_DISPLAY_NAME_MAPPINGS = {}
-print("[FrameWeaver] APIs registered (/frameweaver/open_output, /frameweaver/list_output)")
+print("[FrameWeaver] APIs registered (/frameweaver/open_output, /frameweaver/list_output, /frameweaver/lora_meta)")

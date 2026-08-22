@@ -21,6 +21,18 @@ export interface GenerationParams {
   extraLoraStrength: number
 }
 
+/** Civitai由来のLoRA説明(frameweaver_lora_meta.json)。キーは "baseSlug/filename.safetensors" */
+export interface LoraMetaEntry {
+  name: string
+  base: string
+  genre: string
+  triggers: string[]
+  nsfw: boolean
+  url: string
+  desc: string
+}
+export type LoraMetaMap = Record<string, LoraMetaEntry>
+
 /** ComfyUI APIフォーマットのノード */
 export interface ApiNode {
   class_type: string
