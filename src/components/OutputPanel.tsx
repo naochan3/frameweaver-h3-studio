@@ -11,8 +11,6 @@ export function OutputPanel() {
   const videoUrl = useGenerationStore((s) => s.videoUrl)
   const resultKind = useGenerationStore((s) => s.resultKind)
   const sendImageToSource = useGenerationStore((s) => s.sendImageToSource)
-  const openOutputFolder = useGenerationStore((s) => s.openOutputFolder)
-  const imageModel = useGenerationStore((s) => s.imageParams.model)
 
   // 1秒ごとに再描画して経過/残り時間を更新
   const [now, setNow] = useState(() => Date.now())
@@ -56,13 +54,6 @@ export function OutputPanel() {
             >
               {resultKind === 'image' ? '画像を保存' : '動画を保存'}
             </a>
-            <button
-              onClick={() => void openOutputFolder(resultKind === 'image' ? imageModel : 'video')}
-              className="rounded-lg border border-cream-200 px-3 py-1.5 text-xs font-semibold text-ink-600 hover:bg-cream-100"
-              title="保存先フォルダをエクスプローラーで開く"
-            >
-              保存先を開く
-            </button>
           </div>
         )}
       </div>

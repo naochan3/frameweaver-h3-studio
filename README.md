@@ -24,10 +24,14 @@ ComfyUIバックエンド(127.0.0.1:8189)とWebUI(http://localhost:5180)が別�
 ```powershell
 # 1. バックエンド
 powershell -ExecutionPolicy Bypass -File C:\AI\ComfyUI_H3\start.ps1
-# 2. WebUI(このフォルダで)
+# 2. Rust API (別ターミナル、このフォルダで)
+npm run dev:api
+# 3. WebUI (別ターミナル、このフォルダで)
 npm run dev
-# 3. ブラウザで http://localhost:5180
+# 4. ブラウザで http://localhost:5180
 ```
+
+`npm run dev:api` は Rust API を `127.0.0.1:5181` に固定し、Vite の `/api/fleet` プロキシと対にします。本番の Rust 既定ポートは引き続き `127.0.0.1:5180` です。
 
 終了はそれぞれのウィンドウを閉じるだけ。生成を止めたいだけならWebUIヘッダーの「停止」、VRAMを空けたいときは「解放」。
 
@@ -148,6 +152,51 @@ http://192.168.3.42:5180
 | NSFW ONで生成が変わらない | エンコーダ未DL | text_encoders に heretic ファイルがあるか確認 |
 | ポート8188と競合? | しない | 本スタジオは8189。既存ComfyUI Desktop(8188)と共存可(同時のGPU使用は不可) |
 | 動画の音が出ない | プレイヤーのミュート | プレイヤーの音量アイコンを確認。音声はAACで常に埋め込まれる |
+
+---
+
+## Access boundary
+
+P0/P1の境界はTailnet ACLだけです。ブラウザowner UUIDは誤操作の所有者分離用であり認証ではありません。Discord OAuth/allowlistはP2であり、`DISCORD_AUTH_ENABLED=1` はdaemonをfail-closedで停止します。OAuthの環境変数やRedirect URIを設定して運用しないでください。
+
+---
+
+## ComfyUI custom-node プロファイル
+
+`config/comfy-profiles.json` は custom node の起動プロファイルを宣言します。既定は現行起動と互換な `full` で、起動引数は出力しません。Scheduled Task・実行中の ComfyUI・WebUI からはプロファイルを変更しません。切替は ComfyUI 再起動を伴うため、操作者が停止中に明示的に行ってください。
+
+```powershell
+# `full`（既定）は現在の起動を変更しない
+.\scripts\Get-ComfyProfileArgs.ps1
+
+# minimal custom-node プロファイル用の引数を表示するだけ（起動はしない）
+.\scripts\Get-ComfyProfileArgs.ps1 -Profile image
+
+# インストール済み custom_nodes を読取り診断するだけ
+.\scripts\Test-ComfyProfile.ps1 -Profile video
+```
+
+- `minimal`: すべての custom node を無効化し、health/基本接続の診断に使う。
+- `image` / `video`: 現行workflowの画像生成（image-workflow）とH3動画生成（CreateVideo/SaveVideo）はcore/comfy_extrasだけで動作するため、`minimal` と同じ `--disable-all-custom-nodes` だけへ展開する。
+- `full`: 現行互換の全 custom node モード。出力フォルダを開く `frameweaver_openfolder` のリモートGUI endpoint はこのプロファイルだけで許可する。
+
+`Test-ComfyProfile.ps1 -ComfyLogPath <ComfyUIログ>` は、custom node を import せず既存ログから import failure も報告します。
+
+将来custom nodeを追加する場合は、対応するworkflow・必要な理由・profileの厳密な引数配列を検証するPesterテストを同じ変更に含めてください。
+
+## Windows 常駐ライフサイクル（dry-run が既定）
+
+`frameweaverd` はビルド済み Rust binary と `dist/` を直接配信します。次のコマンドは Scheduled Task を**変更せず**、action・working directory・3回/1分の再試行設定と rollback コマンドだけを表示します。
+
+```powershell
+.\scripts\Install-FrameWeaverdTask.ps1
+```
+
+実際に登録するのは操作者が `-Apply` を付けた場合だけです。`-RollbackPath <path>` は dry-run でも export でき、`-Apply` 時には既存 Task XML を含む復元スクリプト（新規 Task なら unregister）を出力します。
+
+ランナーは `%LOCALAPPDATA%\FrameWeaver\logs` に timestamped JSONL を稼働中から追記し、stdout/stderr・exit/panic と health wait の結果を記録します。10 MiB 到達時に次ファイルへ切替え、JSONL/stdout/stderr は7日保持です。ログは同一 Windows ユーザーだけが読める `%LOCALAPPDATA%` 配下に置き、token/secret/password/authorization と prompt 値を最小限 redact します。ログディレクトリを共有・同期・公開しないでください。
+
+Pester の `scripts/tests/FrameWeaverdLifecycle.Tests.ps1` は dry-run が Task を登録しないことを実測します。custom-node profile の missing/import report は既存の `scripts/tests/ComfyProfiles.Tests.ps1` で検証します。
 
 ---
 

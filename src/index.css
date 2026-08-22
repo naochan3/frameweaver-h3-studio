@@ -17,6 +17,18 @@ body {
   color: var(--color-ink-900);
 }
 
+:root {
+  --generate-bar-height: 76px;
+}
+
+.app-shell {
+  padding-bottom: var(--generate-bar-height);
+}
+
+.generate-bar {
+  min-height: var(--generate-bar-height);
+}
+
 /* 使い方ガイドのアニメーション */
 @keyframes guide-panel-in {
   from { opacity: 0; transform: translateY(16px) scale(0.98); }

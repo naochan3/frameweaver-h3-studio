@@ -1,7 +1,6 @@
 import { create } from 'zustand'
-import { ComfyClient } from '../lib/comfy-client'
-import { DRAFT_KEYS, loadDraft, saveDraft } from '../lib/draft'
-import { pickHistoryMatch } from '../lib/history-match'
+import { ComfyClient, type HistoryOutput } from '../lib/comfy-client'
+import { frameWeaverApi, takeLegacyHistory, type FrameWeaverJob } from '../lib/frameweaver-api'
 import { buildImageWorkflow } from '../lib/image-workflow'
 import { classifyLora } from '../lib/lora'
 import { imageRecommendedParams, videoRecommendedParams } from '../lib/presets'
@@ -13,11 +12,12 @@ import type { GenerationMode, GenerationParams, ImageModel, ImageParams, LoraMet
 // 「開いているページと同じホスト」にアクセスするだけでComfyUIに繋がる。
 export const COMFY_URL =
   import.meta.env.VITE_COMFY_URL ??
-  (typeof location !== 'undefined' ? `${location.origin}/comfy` : 'http://127.0.0.1:8189/comfy')
+  (typeof location !== 'undefined' ? `${location.origin}/comfy` : 'http://127.0.0.1:8188/comfy')
 
 export const client = new ComfyClient(COMFY_URL)
 
 export type OutputKind = 'video' | 'image'
+export type WorkerPreference = { mode: 'auto' } | { mode: 'explicit'; worker_id: string }
 
 export interface HistoryItem {
   promptId: string
@@ -37,25 +37,27 @@ export interface HistoryItem {
     seed: number
     extraLora?: string
     extraLoraStrength?: number
-    // アニメ(SDXL)のみ
-    cfg?: number
-    negativePrompt?: string
     // 動画のみ
     lengthSec?: number
     turbo?: boolean
-    /** 生成にかかった秒数(このブラウザで生成したもののみ記録) */
     durationSec?: number
+    cfg?: number
+    negativePrompt?: string
   }
 }
 
 export type GenerationStatus = 'idle' | 'uploading' | 'queued' | 'running' | 'done' | 'error'
 
 interface GenerationState {
+  workerPreference: WorkerPreference
+  setWorkerPreference: (preference: WorkerPreference) => void
   connected: boolean
   queueRemaining: number
   vram: { total: number; free: number } | null
   /** ComfyUI 上で選択可能な LoRA 一覧(追加LoRAの候補表示用) */
   loraList: string[]
+  checkpointList: string[]
+  loraMeta: LoraMetaMap
   params: GenerationParams
   /** アップロード済み画像 (ComfyUI上のファイル名と表示用URL) */
   sources: { name: string; previewUrl: string }[]
@@ -74,21 +76,11 @@ interface GenerationState {
   resultKind: OutputKind
   error: string | null
   history: HistoryItem[]
-  /** RECENTの分類タブ('video'=MiniMax H3 / 'zimage' / 'krea2' / 'anime') */
-  historyTab: 'video' | 'zimage' | 'krea2' | 'anime'
-  /** ComfyUI 上で選択可能なチェックポイント一覧(アニメモデル選択用) */
-  checkpointList: string[]
-  /** Civitai由来のLoRA説明メタ(選択時の説明・トリガー表示用) */
-  loraMeta: LoraMetaMap
-  /** 選択中タブのフォルダから読み込んだ過去生成一覧 */
-  folderItems: HistoryItem[]
-  folderLoading: boolean
   /** アプリ上部のタブ(動画/画像) */
   appTab: 'video' | 'image'
   imageParams: ImageParams
   /** 使い方ガイドの表示状態(初回訪問時は自動表示) */
   guideOpen: boolean
-  /** LoRAカタログ(サムネ付き一覧)の表示状態 */
   loraCatalogOpen: boolean
   /** シードを生成ごとにランダムにするか(動画/画像それぞれ) */
   videoSeedRandom: boolean
@@ -98,9 +90,6 @@ interface GenerationState {
   toggleImageSeedRandom: () => void
   setGuideOpen: (open: boolean) => void
   setLoraCatalogOpen: (open: boolean) => void
-  /** LoRAメタを再取得する(DL進行中に最新化) */
-  refreshLoraMeta: () => Promise<void>
-  /** カタログからLoRAを選択: 対象モデルへ自動切替し、追加LoRAに設定する */
   applyLoraFromCatalog: (metaKey: string) => void
   setAppTab: (tab: 'video' | 'image') => void
   setImageParams: (patch: Partial<ImageParams>) => void
@@ -125,28 +114,48 @@ interface GenerationState {
   removeSource: (index: number) => void
   generate: () => Promise<void>
   stop: () => Promise<void>
-  freeVram: () => Promise<void>
-  /** 出力フォルダをエクスプローラーで開く('' / video / zimage / krea2) */
-  openOutputFolder: (subdir: string) => Promise<void>
-  /** RECENTの分類タブを切り替え、そのフォルダを読み込む */
-  setHistoryTab: (tab: 'video' | 'zimage' | 'krea2' | 'anime') => void
-  /** 選択中タブのフォルダを再読み込みする */
-  reloadFolder: () => Promise<void>
-  clearHistory: () => void
 }
 
-const HISTORY_KEY = 'frameweaver-history'
-
-function loadHistory(): HistoryItem[] {
+function outputFromJob(job: FrameWeaverJob): HistoryOutput | null {
+  if (!job.output_json) return null
   try {
-    return JSON.parse(localStorage.getItem(HISTORY_KEY) ?? '[]') as HistoryItem[]
+    const outputs = JSON.parse(job.output_json) as unknown
+    if (!Array.isArray(outputs)) return null
+    for (const value of outputs) {
+      const output = value as Partial<HistoryOutput>
+      if (typeof output.filename === 'string') {
+        return {
+          filename: output.filename,
+          subfolder: typeof output.subfolder === 'string' ? output.subfolder : '',
+          type: typeof output.type === 'string' ? output.type : 'output',
+        }
+      }
+    }
   } catch {
-    return []
+    // 壊れた旧出力メタデータは、履歴行自体を消さずプレビューなしとして扱う。
   }
+  return null
 }
 
-function saveHistory(items: HistoryItem[]) {
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(items.slice(0, 50)))
+export function historyFromJob(job: FrameWeaverJob): HistoryItem {
+  let settings: HistoryItem['settings']
+  try {
+    settings = JSON.parse(job.settings_json) as HistoryItem['settings']
+  } catch {
+    settings = undefined
+  }
+  const output = outputFromJob(job)
+  return {
+    promptId: job.id,
+    kind: job.kind,
+    mode: job.mode,
+    prompt: job.prompt,
+    nsfw: false,
+    videoUrl: output ? client.viewUrl(output) : '',
+    filename: output?.filename ?? job.id,
+    createdAt: job.created_at,
+    settings,
+  }
 }
 
 /** モードごとに必要な画像枚数 [最小, 最大] */
@@ -161,12 +170,14 @@ export function imageSlots(mode: GenerationMode): [number, number] {
 }
 
 export const useGenerationStore = create<GenerationState>((set, get) => ({
+  workerPreference: { mode: 'auto' },
+  setWorkerPreference: (workerPreference) => set({ workerPreference }),
   connected: false,
   queueRemaining: 0,
   vram: null,
   params: {
     mode: 'text',
-    prompt: loadDraft(localStorage, DRAFT_KEYS.videoPrompt),
+    prompt: '',
     nsfw: false,
     images: [],
     turbo: true,
@@ -192,14 +203,11 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
   videoUrl: null,
   resultKind: 'video',
   error: null,
-  history: loadHistory(),
-  historyTab: 'video',
-  folderItems: [],
-  folderLoading: false,
+  history: takeLegacyHistory<HistoryItem>(),
   appTab: 'video',
   imageParams: {
     model: 'zimage',
-    prompt: loadDraft(localStorage, DRAFT_KEYS.imagePrompt),
+    prompt: '',
     width: 864,
     height: 1536,
     steps: 8,
@@ -224,30 +232,24 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
     set({ guideOpen: open })
   },
 
-  setLoraCatalogOpen: (open) => {
-    set({ loraCatalogOpen: open })
-    if (open) void get().refreshLoraMeta()
-  },
-
-  refreshLoraMeta: async () => {
-    const [loraMeta, loraList] = await Promise.all([client.getLoraMeta(), client.getLoraList()])
-    set({ loraMeta, loraList })
-  },
+  setLoraCatalogOpen: (loraCatalogOpen) => set({ loraCatalogOpen }),
 
   applyLoraFromCatalog: (metaKey) => {
-    const { loraList } = get()
-    // ComfyUIのLoRA名(Windowsは "\" 区切り)を、メタキー("/" 区切り)から解決
-    const comfyName = loraList.find((n) => n.replace(/\\/g, '/') === metaKey) ?? metaKey
-    const target = classifyLora(metaKey).target // 対象モデル(anime/zimage/krea2 等)
-    set((s) => {
-      const nextModel: ImageModel =
-        target === 'anime' || target === 'zimage' || target === 'krea2' ? target : s.imageParams.model
-      // モデルが変わる場合は推奨値も適用しつつ、LoRAを設定
-      const base = nextModel !== s.imageParams.model ? imageRecommendedParams(nextModel) : {}
+    const comfyName = get().loraList.find((name) => name.replace(/\\/g, '/') === metaKey) ?? metaKey
+    const target = classifyLora(metaKey).target
+    set((state) => {
+      const model: ImageModel =
+        target === 'anime' || target === 'zimage' || target === 'krea2' ? target : state.imageParams.model
       return {
         appTab: 'image',
         loraCatalogOpen: false,
-        imageParams: { ...s.imageParams, ...base, model: nextModel, extraLora: comfyName, extraLoraStrength: 1.0 },
+        imageParams: {
+          ...state.imageParams,
+          ...(model !== state.imageParams.model ? imageRecommendedParams(model) : {}),
+          model,
+          extraLora: comfyName,
+          extraLoraStrength: 1,
+        },
       }
     })
   },
@@ -288,8 +290,11 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
     })
     try {
       const wf = buildImageWorkflow(imageParams)
-      const promptId = await client.submit(wf)
-      set({ currentPromptId: promptId })
+      const job = await frameWeaverApi.createJob({
+        client_id: client.clientId, worker_preference: get().workerPreference,
+        kind: 'image', mode: imageParams.model, prompt: imageParams.prompt, settings: imageParams, workflow: wf,
+      })
+      set({ currentPromptId: job.id })
     } catch (e) {
       set({ status: 'error', error: e instanceof Error ? e.message : String(e) })
     }
@@ -379,7 +384,7 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
         imageSeedRandom: s ? false : state.imageSeedRandom,
         imageParams: {
           ...state.imageParams,
-          model: item.mode === 'krea2' ? 'krea2' : item.mode === 'anime' ? 'anime' : 'zimage',
+          model: item.mode === 'krea2' ? 'krea2' : 'zimage',
           prompt: item.prompt,
           ...(s && {
             width: s.width,
@@ -388,10 +393,6 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
             seed: s.seed,
             extraLora: s.extraLora ?? '',
             extraLoraStrength: s.extraLoraStrength ?? 1.0,
-            ...(item.mode === 'anime' && {
-              cfg: s.cfg ?? 6,
-              negativePrompt: s.negativePrompt ?? '',
-            }),
           }),
         },
       }))
@@ -427,72 +428,34 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
       currentKind: 'video',
     })
     try {
-      const wf = patchWorkflow({ ...params, images: sources.map((s) => s.name) })
-      const promptId = await client.submit(wf)
-      set({ currentPromptId: promptId })
+      const paramsWithSources = { ...params, images: sources.map((source) => source.name) }
+      const wf = patchWorkflow(paramsWithSources)
+      const job = await frameWeaverApi.createJob({
+        client_id: client.clientId, worker_preference: get().workerPreference,
+        kind: 'video', mode: params.mode, prompt: params.prompt, settings: paramsWithSources, workflow: wf,
+      })
+      set({ currentPromptId: job.id })
     } catch (e) {
       set({ status: 'error', error: e instanceof Error ? e.message : String(e) })
     }
   },
 
   stop: async () => {
-    await client.interrupt()
-    await client.clearQueue()
-    set({ status: 'idle', progress: null })
-  },
-
-  freeVram: async () => {
-    await client.freeMemory()
-  },
-
-  openOutputFolder: async (subdir) => {
-    const ok = await client.openOutputFolder(subdir)
-    if (!ok) {
-      set({ error: 'フォルダを開けませんでした(ComfyUIの再起動が必要な場合があります)' })
+    const { currentPromptId } = get()
+    if (!currentPromptId) return
+    try {
+      await frameWeaverApi.cancelJob(currentPromptId)
+      set({ status: 'idle', progress: null, currentPromptId: null })
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : String(error) })
     }
   },
 
-  setHistoryTab: (tab) => {
-    set({ historyTab: tab })
-    void get().reloadFolder()
-  },
-
-  reloadFolder: async () => {
-    const { historyTab, history } = get()
-    set({ folderLoading: true })
-    const files = await client.listOutput(historyTab)
-    // localStorage履歴(プロンプト・設定あり)を「ファイル名+時刻の近さ」で突き合わせて情報を補強。
-    // ComfyUIの連番はセッションをまたぐと再利用されるため、名前だけの一致では別ジョブの
-    // プロンプトが付くことがある(pickHistoryMatch が時刻許容範囲外を弾く)。
-    const kind: OutputKind = historyTab === 'video' ? 'video' : 'image'
-    const items: HistoryItem[] = files.map((f) => {
-      const m = pickHistoryMatch(history, f.filename, f.mtime)
-      return {
-        promptId: m?.promptId ?? f.filename,
-        kind,
-        mode: m?.mode ?? (historyTab === 'video' ? 'video' : historyTab),
-        // localStorage履歴に無ければファイル埋め込みメタデータから復元したプロンプトを使う
-        prompt: m?.prompt ?? f.prompt ?? '',
-        nsfw: m?.nsfw ?? false,
-        videoUrl: client.viewUrl({ filename: f.filename, subfolder: historyTab, type: 'output' }),
-        filename: f.filename,
-        createdAt: m?.createdAt ?? new Date(f.mtime * 1000).toISOString(),
-        settings: m?.settings,
-      }
-    })
-    set({ folderItems: items, folderLoading: false })
-  },
-
-  clearHistory: () => {
-    saveHistory([])
-    set({ history: [] })
-  },
 }))
 
 async function handleDone(promptId: string) {
   const outputs = await client.fetchOutputs(promptId)
-  const { params, imageParams, history, currentKind, startedAt } = useGenerationStore.getState()
-  const durationSec = startedAt ? Math.round((Date.now() - startedAt) / 1000) : undefined
+  const { params, imageParams, history, currentKind } = useGenerationStore.getState()
   const output =
     currentKind === 'video'
       ? (outputs.find((o) => /\.(mp4|webm|mov)$/i.test(o.filename)) ?? outputs[0])
@@ -522,7 +485,6 @@ async function handleDone(promptId: string) {
             extraLoraStrength: params.extraLoraStrength,
             lengthSec: params.lengthSec,
             turbo: params.turbo,
-            durationSec,
           }
         : {
             width: imageParams.width,
@@ -531,25 +493,15 @@ async function handleDone(promptId: string) {
             seed: imageParams.seed,
             extraLora: imageParams.extraLora,
             extraLoraStrength: imageParams.extraLoraStrength,
-            ...(imageParams.model === 'anime' && {
-              cfg: imageParams.cfg,
-              negativePrompt: imageParams.negativePrompt,
-            }),
-            durationSec,
           },
   }
-  const newHistory = [item, ...history]
-  saveHistory(newHistory)
-  const subdir: 'video' | 'zimage' | 'krea2' | 'anime' = currentKind === 'video' ? 'video' : imageParams.model
   useGenerationStore.setState({
     status: 'done',
     videoUrl: url,
     resultKind: currentKind,
-    history: newHistory,
+    history: [item, ...history.filter((existing) => existing.promptId !== promptId)],
     progress: null,
-    historyTab: subdir,
   })
-  void useGenerationStore.getState().reloadFolder()
 }
 
 // WebSocketイベント → ストア反映
@@ -562,7 +514,6 @@ client.onEvent((ev) => {
         void client.getLoraList().then((loraList) => useGenerationStore.setState({ loraList }))
         void client.getCheckpointList().then((checkpointList) => useGenerationStore.setState({ checkpointList }))
         void client.getLoraMeta().then((loraMeta) => useGenerationStore.setState({ loraMeta }))
-        void useGenerationStore.getState().reloadFolder()
       }
       if (ev.message === 'disconnected') useGenerationStore.setState({ connected: false })
       if (ev.queueRemaining !== undefined) useGenerationStore.setState({ queueRemaining: ev.queueRemaining })
@@ -598,20 +549,8 @@ client.onEvent((ev) => {
 
 client.connect()
 
-// プロンプト下書きの永続化(リロードしても消えないように変更のたび保存)
-useGenerationStore.subscribe((s, prev) => {
-  if (s.params.prompt !== prev.params.prompt) {
-    saveDraft(localStorage, DRAFT_KEYS.videoPrompt, s.params.prompt)
-  }
-  if (s.imageParams.prompt !== prev.imageParams.prompt) {
-    saveDraft(localStorage, DRAFT_KEYS.imagePrompt, s.imageParams.prompt)
-  }
-})
-
-// VRAM 監視(5秒ポーリング)
-setInterval(async () => {
-  const stats = await client.systemStats()
-  if (stats) {
-    useGenerationStore.setState({ vram: { total: stats.vramTotal, free: stats.vramFree }, connected: true })
-  }
-}, 5000)
+void frameWeaverApi.listJobs()
+  .then((jobs) => useGenerationStore.setState({ history: jobs.map(historyFromJob) }))
+  .catch(() => {
+    // API が一時的に利用できない間だけ、初期化時に読んだ旧履歴を表示し続ける。
+  })
