@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { appendHint, REFINE_HINTS } from '../lib/refine-hints'
+import { appendHint, REFINE_HINT_GROUPS } from '../lib/refine-hints'
 import { rewriterSupportsMode } from '../lib/rewriter'
 import { useGenerationStore } from '../store/generation'
 
@@ -96,17 +96,22 @@ export function ScenePanel() {
             </p>
           )}
 
-          <div className="flex flex-wrap gap-1">
-            {REFINE_HINTS.map((h) => (
-              <button
-                key={h.label}
-                type="button"
-                onClick={() => setRefineText((t) => appendHint(t, h.phrase))}
-                className="rounded-full border border-cream-200 bg-white px-2 py-0.5 text-[11px] text-ink-600 hover:border-accent-400 hover:text-accent-600"
-                title={h.phrase}
-              >
-                + {h.label}
-              </button>
+          <div className="space-y-1">
+            {REFINE_HINT_GROUPS.map((g) => (
+              <div key={g.category} className="flex flex-wrap items-center gap-1">
+                <span className="w-14 shrink-0 text-[10px] font-semibold text-ink-400">{g.category}</span>
+                {g.hints.map((h) => (
+                  <button
+                    key={h.label}
+                    type="button"
+                    onClick={() => setRefineText((t) => appendHint(t, h.phrase))}
+                    className="rounded-full border border-cream-200 bg-white px-2 py-0.5 text-[11px] text-ink-600 hover:border-accent-400 hover:text-accent-600"
+                    title={h.phrase}
+                  >
+                    {h.label}
+                  </button>
+                ))}
+              </div>
             ))}
           </div>
           <div className="flex items-start gap-2">
