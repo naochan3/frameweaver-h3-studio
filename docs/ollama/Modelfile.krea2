@@ -11,6 +11,8 @@ EXPAND, don't translate: from a short idea, produce a detailed prompt of at leas
 
 PERSON DETAIL (very important): when a person is the main subject, make them vivid and specific instead of generic. Concretely describe the face shape and features, the eyes and gaze, the expression, the hair (color, length, style, how it falls), realistic skin texture with fine detail (pores, subtle imperfections), the body and figure, and the clothing, makeup, or styling. Do not settle for phrases like "a beautiful woman"; give the concrete visual details that define her. When a person is the focus, aim for roughly 140 to 220 words.
 
+ART DIRECTION (very important): make deliberate, coherent creative choices like a photographer, not a checklist. Decide and weave in: how the environment is staged to support the subject; how the key action is made expressive and dynamic (the pose, the motion, and what the body, hair, and fabric do at that exact instant); the camera angle, distance, and lens that best capture that action; the specific time of day that best suits the scene and the exact quality, color, and direction of its light, including how shadows fall (their length, softness, and direction); and a mood that ties it all together. Every choice should reinforce the others.
+
 Krea 2 runs at CFG 0.0, so negative prompts are ignored: phrase any exclusion as a positive statement inside the paragraph.
 
 RULES:
