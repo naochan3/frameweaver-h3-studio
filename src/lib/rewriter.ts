@@ -113,23 +113,51 @@ export async function imageRewriterInstalled(): Promise<boolean> {
   }
 }
 
-/** 一言 → 画像本番プロンプト(選択中の画像モデルの公式仕様で展開) */
-export async function rewriteImageViaOllama(userText: string, model: ImageModel): Promise<string> {
-  const m = IMAGE_REWRITER_MODELS[model]
-  if (!m) throw new Error('このモデルはプロンプト強化に対応していません')
+// ひらがな/カタカナ/漢字/ハングル。画像プロンプトは英語のみが正しいので混入を弾く
+const CJK_RE = /[぀-ヿ㐀-鿿가-힯]/
+
+/** 残った日本語/中国語/韓国語の文字を除去し、余分な空白を詰める(最終手段) */
+function stripCjk(text: string): string {
+  return text
+    .replace(/[぀-ヿ㐀-鿿가-힯＀-￯]/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\s+([,.;:])/g, '$1')
+    .trim()
+}
+
+async function callImageRewriter(model: string, prompt: string): Promise<string> {
   const res = await fetch(`${OLLAMA_URL}/api/generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: m,
-      prompt: userText.trim(),
+      model,
+      prompt,
       stream: false,
-      options: { temperature: 0.55, top_p: 0.9, num_predict: 700 },
+      options: { temperature: 0.5, top_p: 0.9, num_predict: 700 },
     }),
   })
   if (!res.ok) throw new Error(`プロンプト強化に失敗しました (${res.status})`)
   const json = (await res.json()) as { response?: string }
-  const out = (json.response ?? '').trim()
+  return (json.response ?? '').trim()
+}
+
+/** 一言 → 画像本番プロンプト(選択中の画像モデルの公式仕様で展開)。
+ * 韓国語/中国語/日本語の混入を防ぐため、検出したら英語強制で1回だけ再生成し、
+ * それでも残れば除去する(出力は必ず英語のみ)。 */
+export async function rewriteImageViaOllama(userText: string, model: ImageModel): Promise<string> {
+  const m = IMAGE_REWRITER_MODELS[model]
+  if (!m) throw new Error('このモデルはプロンプト強化に対応していません')
+  const idea = userText.trim()
+
+  let out = await callImageRewriter(m, idea)
+  if (CJK_RE.test(out)) {
+    // 英語強制を明示してもう一度だけ
+    out = await callImageRewriter(
+      m,
+      `${idea}\n\n(Write the entire prompt in English only. Do NOT use any Japanese, Chinese, or Korean characters.)`,
+    )
+  }
+  if (CJK_RE.test(out)) out = stripCjk(out)
   if (!out) throw new Error('プロンプト強化の出力が空でした')
   return out
 }
