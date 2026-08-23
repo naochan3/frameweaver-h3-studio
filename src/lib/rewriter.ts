@@ -247,6 +247,45 @@ export async function rewriteImageViaOllama(userText: string, model: ImageModel)
   return finalizeImageRewrite(out, idea, model)
 }
 
+/** 現在の英語プロンプトに、日本語の抽象的な修正指示を反映して改善する(出力は英語のまま)。
+ * 実プロンプトは英語を維持し、指示だけ日本語でOK。 */
+export async function refineImageViaOllama(current: string, instruction: string, model: ImageModel): Promise<string> {
+  const m = IMAGE_REWRITER_MODELS[model]
+  if (!m) throw new Error('このモデルはプロンプト強化に対応していません')
+  const cur = current.trim()
+  const inst = instruction.trim()
+  if (!cur) throw new Error('先にプロンプトを用意してください')
+  if (!inst) throw new Error('修正の指示を入力してください')
+  const prompt =
+    `Existing image prompt:\n"""${cur}"""\n\n` +
+    `Revision request (may be written in Japanese): ${inst}\n\n` +
+    `Rewrite the existing prompt into ONE improved single-paragraph English prompt that applies the revision while keeping everything else faithful. ` +
+    `Output English only — no Japanese, Chinese, or Korean characters. Output only the final prompt.`
+  const out = await callImageRewriter(m, prompt)
+  // 語数許容・CJK除去・段落必須(通常の強化と同じ最終処理)
+  return finalizeImageRewrite(out, `${cur} ${inst}`, model)
+}
+
+/** 英語プロンプトを、ユーザーがレビューするための日本語に翻訳する(表示専用・実プロンプトは変えない) */
+export async function translatePromptToJa(text: string): Promise<string> {
+  const body = text.trim()
+  if (!body) return ''
+  const res = await fetch(`${OLLAMA_URL}/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    signal: AbortSignal.timeout(CLIENT_TIMEOUT_MS),
+    body: JSON.stringify({
+      model: 'fw-translate-ja',
+      prompt: body,
+      stream: false,
+      options: { temperature: 0.2, top_p: 0.9, num_predict: 700 },
+    }),
+  })
+  if (!res.ok) throw new Error(`日本語訳に失敗しました (${res.status})`)
+  const json = (await res.json()) as { response?: string }
+  return (json.response ?? '').trim()
+}
+
 /** 一言 → H3本番プロンプト。Ollamaで生成(system は Modelfile に焼込済み) */
 export async function rewriteViaOllama(userText: string, mode: GenerationMode, lengthSec: number): Promise<string> {
   const res = await fetch(`${OLLAMA_URL}/generate`, {

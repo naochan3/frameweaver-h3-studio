@@ -6,7 +6,14 @@ import { buildImageWorkflow } from '../lib/image-workflow'
 import { classifyLora } from '../lib/lora'
 import { imageRecommendedParams, videoRecommendedParams } from '../lib/presets'
 import { randomSeed } from '../lib/seed'
-import { imageRewriterInstalled, rewriteImageViaOllama, rewriteViaOllama, rewriterInstalled } from '../lib/rewriter'
+import {
+  imageRewriterInstalled,
+  refineImageViaOllama,
+  rewriteImageViaOllama,
+  rewriteViaOllama,
+  rewriterInstalled,
+  translatePromptToJa,
+} from '../lib/rewriter'
 import { patchWorkflow } from '../lib/workflow-patcher'
 import type { GenerationMode, GenerationParams, ImageModel, ImageParams, LoraMetaMap } from '../lib/types'
 
@@ -108,6 +115,14 @@ interface GenerationState {
   /** 一言 → 画像本番プロンプトへ自動強化(画像タブ) */
   rewriteImagePrompt: () => Promise<void>
   undoImageRewrite: () => void
+  /** 日本語の抽象指示で画像プロンプトを改善(実プロンプトは英語のまま) */
+  imageRefining: boolean
+  refineImagePrompt: (instruction: string) => Promise<void>
+  /** 実プロンプトの日本語訳(レビュー表示専用。null=未取得/非表示) */
+  imagePromptJa: string | null
+  imageTranslating: boolean
+  translateImagePrompt: () => Promise<void>
+  clearImagePromptJa: () => void
   /** シードを生成ごとにランダムにするか(動画/画像それぞれ) */
   videoSeedRandom: boolean
   imageSeedRandom: boolean
@@ -239,6 +254,9 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
   imageRewriterAvailable: false,
   imageRewriting: false,
   imageRewriteUndo: null,
+  imageRefining: false,
+  imagePromptJa: null,
+  imageTranslating: false,
   videoSeedRandom: true,
   imageSeedRandom: true,
 
@@ -305,9 +323,48 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
     set((s) =>
       s.imageRewriteUndo === null
         ? s
-        : { imageParams: { ...s.imageParams, prompt: s.imageRewriteUndo }, imageRewriteUndo: null },
+        : { imageParams: { ...s.imageParams, prompt: s.imageRewriteUndo }, imageRewriteUndo: null, imagePromptJa: null },
     )
   },
+
+  refineImagePrompt: async (instruction) => {
+    const { imageParams, imageRefining } = get()
+    if (imageRefining) return
+    if (!imageParams.prompt.trim()) {
+      set({ error: '先にプロンプトを用意してください' })
+      return
+    }
+    if (!instruction.trim()) {
+      set({ error: '日本語で修正の指示を入力してください' })
+      return
+    }
+    set({ imageRefining: true, error: null })
+    try {
+      const out = await refineImageViaOllama(imageParams.prompt, instruction, imageParams.model)
+      set((s) => ({
+        imageRefining: false,
+        imageRewriteUndo: s.imageParams.prompt,
+        imageParams: { ...s.imageParams, prompt: out },
+        imagePromptJa: null, // 内容が変わったので古い訳は破棄
+      }))
+    } catch (e) {
+      set({ imageRefining: false, error: e instanceof Error ? e.message : String(e) })
+    }
+  },
+
+  translateImagePrompt: async () => {
+    const { imageParams, imageTranslating } = get()
+    if (imageTranslating || !imageParams.prompt.trim()) return
+    set({ imageTranslating: true, error: null })
+    try {
+      const ja = await translatePromptToJa(imageParams.prompt)
+      set({ imageTranslating: false, imagePromptJa: ja })
+    } catch (e) {
+      set({ imageTranslating: false, error: e instanceof Error ? e.message : String(e) })
+    }
+  },
+
+  clearImagePromptJa: () => set({ imagePromptJa: null }),
 
   setLoraCatalogOpen: (open) => {
     set({ loraCatalogOpen: open })

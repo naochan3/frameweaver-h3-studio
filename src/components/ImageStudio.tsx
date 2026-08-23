@@ -37,6 +37,13 @@ export function ImageStudio() {
   const imageRewriteUndo = useGenerationStore((s) => s.imageRewriteUndo)
   const rewriteImagePrompt = useGenerationStore((s) => s.rewriteImagePrompt)
   const undoImageRewrite = useGenerationStore((s) => s.undoImageRewrite)
+  const imageRefining = useGenerationStore((s) => s.imageRefining)
+  const refineImagePrompt = useGenerationStore((s) => s.refineImagePrompt)
+  const imagePromptJa = useGenerationStore((s) => s.imagePromptJa)
+  const imageTranslating = useGenerationStore((s) => s.imageTranslating)
+  const translateImagePrompt = useGenerationStore((s) => s.translateImagePrompt)
+  const clearImagePromptJa = useGenerationStore((s) => s.clearImagePromptJa)
+  const [refineText, setRefineText] = useState('')
 
   const busy = status === 'queued' || status === 'running'
   const ready = !busy && imageParams.prompt.trim().length > 0
@@ -118,6 +125,52 @@ export function ImageStudio() {
           )}
           <p className="text-right text-xs text-ink-400">{imageParams.prompt.length}文字</p>
         </div>
+
+        {/* 日本語でレビュー & 修正(実プロンプトは英語のまま) */}
+        {canRewrite && imageParams.prompt.trim() && (
+          <div className="mt-3 space-y-2 rounded-xl border border-cream-200 bg-cream-50 p-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-ink-600">日本語で確認・修正</span>
+              <button
+                type="button"
+                onClick={() => (imagePromptJa === null ? void translateImagePrompt() : clearImagePromptJa())}
+                disabled={imageTranslating}
+                className="rounded-lg border border-cream-200 bg-white px-2.5 py-1 text-xs font-semibold text-ink-600 hover:bg-cream-100 disabled:opacity-50"
+              >
+                {imageTranslating ? '訳しています…' : imagePromptJa === null ? '日本語で内容を見る' : '日本語表示を閉じる'}
+              </button>
+            </div>
+
+            {imagePromptJa !== null && (
+              <p className="whitespace-pre-wrap rounded-lg border border-cream-200 bg-white p-2 text-xs leading-relaxed text-ink-700">
+                {imagePromptJa || '(訳が空でした)'}
+              </p>
+            )}
+
+            <div className="flex items-start gap-2">
+              <textarea
+                value={refineText}
+                onChange={(e) => setRefineText(e.target.value)}
+                placeholder="日本語で修正指示(例: 背景を夕焼けに、水しぶきを大きく、顔をアップに)"
+                className="h-14 flex-1 resize-y rounded-lg border border-cream-200 bg-white p-2 text-xs outline-none focus:border-accent-400"
+              />
+              <button
+                type="button"
+                onClick={async () => {
+                  await refineImagePrompt(refineText)
+                  setRefineText('')
+                }}
+                disabled={imageRefining || !refineText.trim()}
+                className="shrink-0 rounded-lg bg-accent-500 px-4 py-2 text-xs font-bold text-white hover:bg-accent-600 disabled:opacity-50"
+              >
+                {imageRefining ? '反映中…' : '修正を反映'}
+              </button>
+            </div>
+            <p className="text-[11px] text-ink-400">
+              指示は日本語でOK。実際のプロンプトは英語のまま改善されます。何度でも重ねられます(「元に戻す」で1つ前へ)。
+            </p>
+          </div>
+        )}
       </section>
 
       {/* RECIPE */}

@@ -1,4 +1,4 @@
-export const REWRITER_MODELS = ['frameweaver-rewriter', 'fw-rewriter-krea2', 'fw-rewriter-zimage'] as const
+export const REWRITER_MODELS = ['frameweaver-rewriter', 'fw-rewriter-krea2', 'fw-rewriter-zimage', 'fw-translate-ja'] as const
 
 type GatewayOptions = {
   upstream?: typeof fetch
