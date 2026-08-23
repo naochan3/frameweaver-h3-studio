@@ -37,6 +37,16 @@ describe('rewriter output contracts', () => {
     expect(() => validateVideoRewrite(out, 5)).toThrow('時刻順')
   })
 
+  it('ignores quoted shot tokens when validating structural shot numbers', () => {
+    const out = video.replace('the camera moves closer.', 'the camera moves closer while a monitor displays "[Shot 2]".')
+    expect(validateVideoRewrite(out, 5)).toBe(out)
+  })
+
+  it('ignores dialogue timestamps when validating structural shot order', () => {
+    const out = video.replace('the camera moves closer.', 'a speaker says <d>[English] At 00:02.000, leave.</d>')
+    expect(validateVideoRewrite(out, 5)).toBe(out)
+  })
+
   it.each([
     ['first', 'For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.'],
     ['first_last', 'How the reference pictures align with the target video — Picture 1 (from Shot 1) aligns with the 0.00-second mark of the target video; Picture 2 (from Shot 2) aligns with the 5.00-second mark of the target video.'],
@@ -64,6 +74,16 @@ describe('rewriter output contracts', () => {
   it('accepts visible text requested with straight double quotes', () => {
     const output = `A storefront sign reads "営業中" clearly. ${Array.from({ length: 60 }, () => 'detail').join(' ')}`
     expect(validateImageRewrite(output, '看板に"営業中"と表示', 'krea2')).toBe(output)
+  })
+
+  it('does not require quoted text that the user explicitly says not to display', () => {
+    const output = `A blank storefront sign remains completely empty. ${Array.from({ length: 60 }, () => 'detail').join(' ')}`
+    expect(validateImageRewrite(output, '看板に「営業中」と表示しない', 'krea2')).toBe(output)
+  })
+
+  it('does not treat quoted speech as requested visible text', () => {
+    const output = `A person speaks beside an empty wall. ${Array.from({ length: 60 }, () => 'detail').join(' ')}`
+    expect(validateImageRewrite(output, 'A person says "OPEN"', 'krea2')).toBe(output)
   })
 
   it('rejects unquoted CJK leakage in image prose', () => {
@@ -99,5 +119,13 @@ describe('rewriter output contracts', () => {
     const words = Array.from({ length: 60 }, (_, index) => `detail${index}`).join(' ')
     vi.stubGlobal('fetch', vi.fn(async () => Response.json({ response: `A sign reads "営業中" with 美しい styling. ${words}` })))
     await expect(rewriteImageViaOllama('看板に「営業中」と表示', 'krea2')).rejects.toThrow('英語以外')
+  })
+
+  it('keeps requested ASCII display text through the final CJK fallback', async () => {
+    const words = Array.from({ length: 60 }, (_, index) => `detail${index}`).join(' ')
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ response: `A sign reads "OPEN" with 美しい styling. ${words}` })))
+    const result = await rewriteImageViaOllama('sign reads "OPEN"', 'krea2')
+    expect(result).toContain('"OPEN"')
+    expect(result).not.toMatch(/[぀-ヿ㐀-鿿가-힯]/)
   })
 })
