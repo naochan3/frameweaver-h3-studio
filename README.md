@@ -174,6 +174,17 @@ WebUIは `0.0.0.0` 待受。同じネットワークの端末から `http://<PC�
 - 各LoRAの説明メタは `loras/frameweaver_lora_meta.json`(Civitai由来の名前/ジャンル/トリガー/画像URL)。カスタムノードの `/frameweaver/lora_meta` が配信する。
 - LoRAは**学習元モデル専用**。対象が違うと効かない(アプリは自動で仕分け・警告)。
 
+**一括収集スクリプト**: Civitaiの人気LoRAをベースモデル別に自動DLし、上記メタJSONとカタログMDまで生成する:
+
+```powershell
+$env:CIVITAI_TOKEN = "<あなたのCivitai APIキー>"   # Manage Account → API Keys で発行
+node scripts/fetch-loras.mjs
+```
+
+- 429(レート制限)は自動バックオフ、既存ファイルはスキップ。収集対象は `scripts/fetch-loras.mjs` の `CURATED` / `QUERIES` で編集可。
+- 保存先は既定 `C:\AI\ComfyUI_Data\models\loras`(`LORA_DIR` で変更可)。
+- **トークンはコードに書かず環境変数のみ**。不要ジャンル(動物エロ等)は各自 `loras/_trash` へ退避してよい。未成年表現は扱わない。
+
 ### プロンプト強化(Ollama)
 
 | Ollamaモデル | 用途 | ベース |
@@ -255,6 +266,7 @@ src/                     WebUI本体(React + zustand)
   lib/                   ワークフロー生成・ComfyUIクライアント・rewriter(Ollama)・LoRA分類
   store/generation.ts    状態管理の中枢
 comfyui_addon/           ComfyUIカスタムノード(出力フォルダ/履歴/LoRAメタAPI)
+scripts/fetch-loras.mjs  Civitai人気LoRAの一括収集(トークンは環境変数)
 docs/
   ollama/                プロンプト強化用 Modelfile 3種(H3/Krea2/Z-Image)
   WORKFLOWS.md           対応ワークフローのカタログ(正本)
