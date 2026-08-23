@@ -24,6 +24,10 @@ describe('rewriter output contracts', () => {
     )
   })
 
+  it('rejects empty H3 fields even when all labels exist', () => {
+    expect(() => validateVideoRewrite('integrated_multimodal_description:\noverall_soundscape:\nnon_diegetic_music:', 5)).toThrow('出力形式')
+  })
+
   it('rejects H3 shot timestamps outside the requested duration', () => {
     expect(() => validateVideoRewrite(video.replace('00:03.500', '00:05.001'), 5)).toThrow('動画尺')
   })

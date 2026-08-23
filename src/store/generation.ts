@@ -335,6 +335,10 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
         imageParams: { ...s.imageParams, ...base, model: nextModel, extraLora: comfyName, extraLoraStrength: 1.0 },
       }
     })
+    const selectedModel = get().imageParams.model
+    void imageRewriterInstalled(selectedModel).then((ok) => {
+      if (get().imageParams.model === selectedModel) set({ imageRewriterAvailable: ok })
+    })
   },
 
   setAppTab: (tab) => set({ appTab: tab }),

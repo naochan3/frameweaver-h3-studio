@@ -109,7 +109,7 @@ npm run dev                                                          # WebUI(こ
 
 WebUIは `0.0.0.0` 待受。同じネットワークの端末から `http://<PCのIP>:5180`(例 `http://192.168.3.42:5180`)。
 
-- ComfyUI/Ollamaへの通信はViteの `/comfy` `/ollama` プロキシがPCに中継するので**端末側は追加設定不要**
+- ComfyUI通信はViteの `/comfy`、プロンプト強化は制限付き `/rewriter/models`・`/rewriter/generate` がPCに中継するので**端末側は追加設定不要**。Ollamaの管理APIは公開しません。
 - PCのIPは `ipconfig`。初回はファイアウォール許可が要る場合あり:
   ```powershell
   New-NetFirewallRule -DisplayName "FrameWeaver WebUI 5180" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 5180 -Profile Private

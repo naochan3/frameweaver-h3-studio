@@ -136,9 +136,8 @@ export function validateImageRewrite(output: string, input: string, model: Image
 export function validateVideoRewrite(output: string, durationSec: number): string {
   const text = output.trim()
   const fields = ['integrated_multimodal_description:', 'overall_soundscape:', 'non_diegetic_music:']
-  const indexes = fields.map((field) => text.indexOf(field))
-  const exactCounts = fields.map((field) => text.split(field).length - 1)
-  if (indexes.some((index) => index < 0) || exactCounts.some((count) => count !== 1) || !(indexes[0] < indexes[1] && indexes[1] < indexes[2])) {
+  const lines = text.split(/\r?\n/)
+  if (lines.length !== fields.length || fields.some((field, index) => !lines[index].startsWith(field) || !lines[index].slice(field.length).trim())) {
     throw new Error('プロンプト強化の出力形式が不正です')
   }
   for (const match of text.matchAll(/At\s+(\d{2}):(\d{2}\.\d{3})/g)) {

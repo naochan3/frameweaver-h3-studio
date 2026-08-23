@@ -30,13 +30,15 @@ describe('rewriter gateway', () => {
       request('/generate', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ model: models[1], prompt: 'portrait', options: { temperature: 0.5 } }),
+        body: JSON.stringify({ model: models[1], prompt: 'portrait', options: { temperature: 99, num_ctx: 999999 } }),
       }),
     )
 
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({ response: 'rewritten' })
     expect(upstream).toHaveBeenCalledOnce()
+    const forwarded = JSON.parse(String(upstream.mock.calls[0]?.[1]?.body))
+    expect(forwarded.options).toEqual({ temperature: 2 })
   })
 
   it.each(['qwen-private', 'frameweaver-rewriter-evil'])('rejects unapproved model %s', async (model) => {

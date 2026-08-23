@@ -8,6 +8,18 @@ type GatewayOptions = {
   responseBytes?: number
 }
 
+function safeOptions(value: unknown) {
+  if (!value || typeof value !== 'object') return undefined
+  const source = value as Record<string, unknown>
+  const bounded: Record<string, number> = {}
+  const limits = { temperature: [0, 2], top_p: [0, 1], top_k: [1, 100], num_predict: [1, 1200] } as const
+  for (const [key, [minimum, maximum]] of Object.entries(limits)) {
+    const candidate = source[key]
+    if (typeof candidate === 'number' && Number.isFinite(candidate)) bounded[key] = Math.min(maximum, Math.max(minimum, candidate))
+  }
+  return bounded
+}
+
 function json(status: number, value: unknown) {
   return Response.json(value, { status, headers: { 'cache-control': 'no-store' } })
 }
@@ -90,7 +102,7 @@ export function createRewriterGateway(options: GatewayOptions = {}) {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         signal: controller.signal,
-        body: JSON.stringify({ model: input.model, prompt: input.prompt, stream: false, options: input.options }),
+        body: JSON.stringify({ model: input.model, prompt: input.prompt, stream: false, options: safeOptions(input.options) }),
       })
       if (!response.ok) return json(502, { error: 'rewriter failed' })
       const text = await readLimited(response, responseBytes)

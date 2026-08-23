@@ -84,7 +84,7 @@ describe('非同期プロンプト強化の競合防止', () => {
     store.useGenerationStore.getState().setParams({ prompt: 'edited while waiting' })
     resolveFetch({
       ok: true,
-      json: async () => ({ response: 'Shot composition: fixed camera.\nTimeline: At 00:00.000 subject appears. At 00:04.000 subject stops.\nConstraints: no text.' }),
+      json: async () => ({ response: 'integrated_multimodal_description: At 00:00.000 subject appears.\noverall_soundscape: quiet room tone.\nnon_diegetic_music: none.' }),
     })
     await pending
 
