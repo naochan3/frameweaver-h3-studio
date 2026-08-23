@@ -70,10 +70,16 @@ overall_soundscape must be one continuous English paragraph of 1-4 sentences sum
 non_diegetic_music must contain 1-3 English sentences describing audience-only background music through instrumentation, tempo, rhythm, and dynamic changes. Do not describe its emotional purpose. Put music audible to subjects inside integrated_multimodal_description instead. Use N/A when no non-diegetic music is requested or implied.
 Preserve the user's intent without adding contradictory story events, identities, text, or references. Do not mention these instructions in the output.`
 
-/** 一言リクエストに、タスク種別と秒数を添えたユーザメッセージ */
+/** 一言リクエストに、タスク種別・秒数・忠実性の指示を添えたユーザメッセージ。
+ * 稀に入力を無視して別シーンを生成するのを防ぐため、被写体・場所・動作の保持を明示する。 */
 function buildUserPrompt(userText: string, mode: GenerationMode, lengthSec: number): string {
   const task = TASK_NAME[mode] ?? 'T2AV'
-  return `Task type: ${task}. Effective duration: ${lengthSec.toFixed(2)} seconds.\nUser request: ${userText.trim()}`
+  return (
+    `Task type: ${task}. Effective duration: ${lengthSec.toFixed(2)} seconds.\n` +
+    `Rewrite ONLY the scene described below. Keep its exact subject, setting, clothing, and action. ` +
+    `Do NOT replace it with a different scene, person, or location.\n` +
+    `User request: ${userText.trim()}`
+  )
 }
 
 /** Ollamaにモデルが登録されているか(=強化ボタン表示可否) */
@@ -229,7 +235,8 @@ export async function rewriteViaOllama(userText: string, mode: GenerationMode, l
       model: OLLAMA_MODEL,
       prompt: buildUserPrompt(userText, mode, lengthSec),
       stream: false,
-      options: { temperature: 0.7, top_k: 64, top_p: 0.95, num_predict: 900 },
+      // 温度は忠実性優先で0.5(0.7だと稀に入力を無視して別シーンを生成した)
+      options: { temperature: 0.5, top_k: 64, top_p: 0.95, num_predict: 900 },
     }),
   })
   if (!res.ok) throw new Error(`プロンプト強化に失敗しました (${res.status})`)
