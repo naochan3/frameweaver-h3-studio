@@ -135,6 +135,30 @@ function isCjkError(error: unknown): boolean {
   return error instanceof Error && error.message.includes('英語以外')
 }
 
+function isWordCountError(error: unknown): boolean {
+  return error instanceof Error && error.message.includes('語数')
+}
+
+/** 検証を通して最終文字列を得る。CJKは除去、語数は許容(短くても長くてもエラーにしない)。
+ * 単一段落などの致命的な形式崩れのみ例外を投げる(=ユーザーは基本必ず結果を得られる)。 */
+function finalizeImageRewrite(out: string, idea: string, model: ImageModel): string {
+  try {
+    return validateImageRewrite(out, idea, model)
+  } catch (error) {
+    if (isCjkError(error)) {
+      const stripped = stripCjk(out)
+      try {
+        return validateImageRewrite(stripped, idea, model)
+      } catch (retryError) {
+        if (isWordCountError(retryError)) return stripped
+        throw retryError
+      }
+    }
+    if (isWordCountError(error)) return out.trim()
+    throw error
+  }
+}
+
 function requestedVisibleText(input: string): Set<string> {
   return new Set([...input.matchAll(/[「『]([^」』]+)[」』]/g)].map((match) => match[1]))
 }
@@ -206,23 +230,21 @@ export async function rewriteImageViaOllama(userText: string, model: ImageModel)
   const idea = userText.trim()
 
   let out = await callImageRewriter(m, idea)
+  // 検証に引っかかったら(CJK混入・語数不足・形式崩れ)、英語+詳細を促して1回だけ再生成
+  let needsRetry = false
   try {
-    return validateImageRewrite(out, idea, model)
-  } catch (error) {
-    if (!isCjkError(error)) throw error
-    // 英語強制を明示してもう一度だけ
+    validateImageRewrite(out, idea, model)
+  } catch {
+    needsRetry = true
+  }
+  if (needsRetry) {
     out = await callImageRewriter(
       m,
-      `${idea}\n\n(Write the entire prompt in English only. Do NOT use any Japanese, Chinese, or Korean characters.)`,
+      `${idea}\n\n(Write ONE detailed single-paragraph prompt in English only — no Japanese, Chinese, or Korean characters. Add rich, concrete visual detail (camera, lighting, texture, composition) so it is sufficiently long.)`,
     )
   }
-  try {
-    return validateImageRewrite(out, idea, model)
-  } catch (error) {
-    if (!isCjkError(error)) throw error
-    // 最終手段: それでも残るCJKは除去して英語のみで返す(エラーで止めずユーザーは必ず結果を得る)
-    return stripCjk(out)
-  }
+  // CJKは除去・語数は許容して必ず結果を返す(段落崩れ等の致命的な時のみエラー)
+  return finalizeImageRewrite(out, idea, model)
 }
 
 /** 一言 → H3本番プロンプト。Ollamaで生成(system は Modelfile に焼込済み) */
