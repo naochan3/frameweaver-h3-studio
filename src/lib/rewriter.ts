@@ -281,24 +281,55 @@ export async function refineImageViaOllama(current: string, instruction: string,
   return finalizeImageRewrite(out, '', model)
 }
 
-/** 英語プロンプトを、ユーザーがレビューするための日本語に翻訳する(表示専用・実プロンプトは変えない) */
-export async function translatePromptToJa(text: string): Promise<string> {
-  const body = text.trim()
-  if (!body) return ''
+async function callTranslate(prompt: string): Promise<string> {
   const res = await fetch(`${OLLAMA_URL}/generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     signal: AbortSignal.timeout(CLIENT_TIMEOUT_MS),
     body: JSON.stringify({
       model: 'fw-translate-ja',
-      prompt: body,
+      prompt,
       stream: false,
-      options: { temperature: 0.2, top_p: 0.9, num_predict: 700 },
+      options: { temperature: 0.15, top_p: 0.9, num_predict: 800 },
     }),
   })
   if (!res.ok) throw new Error(`日本語訳に失敗しました (${res.status})`)
   const json = (await res.json()) as { response?: string }
   return (json.response ?? '').trim()
+}
+
+// 7Bが固有名詞扱いして訳し残しやすい定型語は確定辞書で日本語化する
+const JA_FIXUPS: [RegExp, string][] = [
+  [/\bcinematic\b/gi, 'シネマティック'],
+  [/\bbokeh\b/gi, 'ボケ'],
+  [/\bsilhouette\b/gi, 'シルエット'],
+  [/\brim ?light\b/gi, 'リムライト'],
+  [/\bbacklit\b/gi, '逆光'],
+  [/\bgolden ?hour\b/gi, 'ゴールデンアワー'],
+  [/\bdepth of field\b/gi, '被写界深度'],
+  [/\bcascade[sd]?\b/gi, '流れ落ち'],
+  [/\bporcelain\b/gi, '磁器のような'],
+  [/\bportrait\b/gi, 'ポートレート'],
+]
+function applyJaFixups(text: string): string {
+  let out = text
+  for (const [re, ja] of JA_FIXUPS) out = out.replace(re, ja)
+  return out
+}
+
+/** 英語プロンプトを、ユーザーがレビューするための日本語に翻訳する(表示専用・実プロンプトは変えない)。
+ * 英単語が残ったら日本語化の仕上げパスを1回入れ、さらに定型語は確定辞書で日本語化する。 */
+export async function translatePromptToJa(text: string): Promise<string> {
+  const body = text.trim()
+  if (!body) return ''
+  let out = await callTranslate(body)
+  // 3文字以上の英単語が残っていたら、残りを日本語化するクリーンアップを1回
+  if (/[A-Za-z]{3,}/.test(out)) {
+    out = await callTranslate(
+      `次の文に残っている英単語をすべて自然な日本語に置き換え、意味を変えずに日本語だけの文にしてください。訳文だけを出力:\n\n${out}`,
+    )
+  }
+  return applyJaFixups(out)
 }
 
 async function callVideoRewriter(prompt: string): Promise<string> {
