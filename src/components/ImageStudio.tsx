@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { classifyLora, selectableLoras } from '../lib/lora'
 import { IMAGE_RECOMMENDED } from '../lib/presets'
+import { imageRewriterSupports } from '../lib/rewriter'
 import { ASPECT_OPTIONS, IMAGE_MP_OPTIONS, computeResolution, type AspectRatio } from '../lib/resolution'
 import type { ImageModel } from '../lib/types'
 import { useGenerationStore } from '../store/generation'
@@ -31,10 +32,16 @@ export function ImageStudio() {
   const setLoraCatalogOpen = useGenerationStore((s) => s.setLoraCatalogOpen)
   const status = useGenerationStore((s) => s.status)
   const error = useGenerationStore((s) => s.error)
+  const imageRewriterAvailable = useGenerationStore((s) => s.imageRewriterAvailable)
+  const imageRewriting = useGenerationStore((s) => s.imageRewriting)
+  const imageRewriteUndo = useGenerationStore((s) => s.imageRewriteUndo)
+  const rewriteImagePrompt = useGenerationStore((s) => s.rewriteImagePrompt)
+  const undoImageRewrite = useGenerationStore((s) => s.undoImageRewrite)
 
   const busy = status === 'queued' || status === 'running'
   const ready = !busy && imageParams.prompt.trim().length > 0
   const isAnime = imageParams.model === 'anime'
+  const canRewrite = imageRewriterAvailable && imageRewriterSupports(imageParams.model)
 
   // 選択中LoRAの説明(Civitai由来)。ComfyUIはWindowsで "\" 区切り、メタキーは "/" なので正規化
   const metaOf = (name: string) => loraMeta[name.trim().replace(/\\/g, '/')]
@@ -82,7 +89,35 @@ export function ImageStudio() {
           placeholder="生成したい画像を詳しく描写してください。実写人物なら iPhone photo / realistic skin texture / full body 等が有効です。"
           className="h-40 w-full resize-y rounded-xl border border-cream-200 bg-cream-50 p-3 text-sm leading-relaxed outline-none focus:border-accent-400"
         />
-        <p className="mt-1 text-right text-xs text-ink-400">{imageParams.prompt.length}文字</p>
+        <div className="mt-1 flex items-center justify-between gap-2">
+          {canRewrite ? (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void rewriteImagePrompt()}
+                disabled={imageRewriting || !imageParams.prompt.trim()}
+                className="rounded-lg border border-accent-300 bg-white px-3 py-1.5 text-xs font-bold text-accent-600 hover:bg-accent-50 disabled:opacity-50"
+                title={`一言を${imageParams.model === 'krea2' ? 'Krea 2' : 'Z-Image'}の公式仕様に沿った本番プロンプトに自動変換します`}
+              >
+                {imageRewriting ? '強化中…' : `プロンプト自動強化(${imageParams.model === 'krea2' ? 'Krea 2' : 'Z-Image'})`}
+              </button>
+              {imageRewriteUndo !== null && !imageRewriting && (
+                <button
+                  type="button"
+                  onClick={undoImageRewrite}
+                  className="rounded-lg border border-cream-200 px-3 py-1.5 text-xs font-semibold text-ink-600 hover:bg-cream-100"
+                >
+                  元に戻す
+                </button>
+              )}
+            </div>
+          ) : (
+            <span className="text-xs text-ink-400">
+              {isAnime && imageRewriterAvailable ? 'アニメは英語タグ入力のため自動強化の対象外です' : ''}
+            </span>
+          )}
+          <p className="text-right text-xs text-ink-400">{imageParams.prompt.length}文字</p>
+        </div>
       </section>
 
       {/* RECIPE */}

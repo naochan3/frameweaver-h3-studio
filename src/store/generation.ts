@@ -6,7 +6,7 @@ import { buildImageWorkflow } from '../lib/image-workflow'
 import { classifyLora } from '../lib/lora'
 import { imageRecommendedParams, videoRecommendedParams } from '../lib/presets'
 import { randomSeed } from '../lib/seed'
-import { rewriteViaOllama, rewriterInstalled } from '../lib/rewriter'
+import { imageRewriterInstalled, rewriteImageViaOllama, rewriteViaOllama, rewriterInstalled } from '../lib/rewriter'
 import { patchWorkflow } from '../lib/workflow-patcher'
 import type { GenerationMode, GenerationParams, ImageModel, ImageParams, LoraMetaMap } from '../lib/types'
 
@@ -101,6 +101,13 @@ interface GenerationState {
   rewritePrompt: () => Promise<void>
   /** リライト結果を取り消して元のプロンプトに戻す */
   undoRewrite: () => void
+  /** 画像プロンプト強化(Krea2/Z-Image)が導入済みか */
+  imageRewriterAvailable: boolean
+  imageRewriting: boolean
+  imageRewriteUndo: string | null
+  /** 一言 → 画像本番プロンプトへ自動強化(画像タブ) */
+  rewriteImagePrompt: () => Promise<void>
+  undoImageRewrite: () => void
   /** シードを生成ごとにランダムにするか(動画/画像それぞれ) */
   videoSeedRandom: boolean
   imageSeedRandom: boolean
@@ -227,6 +234,9 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
   rewriterAvailable: false,
   rewriting: false,
   rewriteUndo: null,
+  imageRewriterAvailable: false,
+  imageRewriting: false,
+  imageRewriteUndo: null,
   videoSeedRandom: true,
   imageSeedRandom: true,
 
@@ -262,6 +272,35 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
 
   undoRewrite: () => {
     set((s) => (s.rewriteUndo === null ? s : { params: { ...s.params, prompt: s.rewriteUndo }, rewriteUndo: null }))
+  },
+
+  rewriteImagePrompt: async () => {
+    const { imageParams, imageRewriting } = get()
+    const text = imageParams.prompt.trim()
+    if (imageRewriting) return
+    if (!text) {
+      set({ error: '強化する一言(何を描きたいか)を先に入力してください' })
+      return
+    }
+    set({ imageRewriting: true, error: null })
+    try {
+      const out = await rewriteImageViaOllama(text, imageParams.model)
+      set((s) => ({
+        imageRewriting: false,
+        imageRewriteUndo: s.imageParams.prompt,
+        imageParams: { ...s.imageParams, prompt: out },
+      }))
+    } catch (e) {
+      set({ imageRewriting: false, error: e instanceof Error ? e.message : String(e) })
+    }
+  },
+
+  undoImageRewrite: () => {
+    set((s) =>
+      s.imageRewriteUndo === null
+        ? s
+        : { imageParams: { ...s.imageParams, prompt: s.imageRewriteUndo }, imageRewriteUndo: null },
+    )
   },
 
   setLoraCatalogOpen: (open) => {
@@ -603,6 +642,7 @@ client.onEvent((ev) => {
         void client.getCheckpointList().then((checkpointList) => useGenerationStore.setState({ checkpointList }))
         void client.getLoraMeta().then((loraMeta) => useGenerationStore.setState({ loraMeta }))
         void rewriterInstalled().then((ok) => useGenerationStore.setState({ rewriterAvailable: ok }))
+        void imageRewriterInstalled().then((ok) => useGenerationStore.setState({ imageRewriterAvailable: ok }))
         void useGenerationStore.getState().reloadFolder()
       }
       if (ev.message === 'disconnected') useGenerationStore.setState({ connected: false })

@@ -1,4 +1,4 @@
-import type { GenerationMode } from './types'
+import type { GenerationMode, ImageModel } from './types'
 
 /** プロンプト自動強化(MiniMax-H3 Prompt Rewriter 8B)。
  * ComfyUIの重いbf16(17.5GB)は12GBで失速したため、Q8 GGUF(8.7GB)を
@@ -87,6 +87,51 @@ export async function rewriterInstalled(): Promise<boolean> {
   } catch {
     return false
   }
+}
+
+/** 画像モデル別のリライタ(Ollamaモデル名)。公式プロンプト仕様に沿って展開。
+ * krea2=Krea公式expansion.txt準拠 / zimage=Z-Image公式ガイド準拠。anime(Danboourタグ)は非対応 */
+export const IMAGE_REWRITER_MODELS: Partial<Record<ImageModel, string>> = {
+  krea2: 'fw-rewriter-krea2',
+  zimage: 'fw-rewriter-zimage',
+}
+
+export function imageRewriterSupports(model: ImageModel): boolean {
+  return IMAGE_REWRITER_MODELS[model] !== undefined
+}
+
+/** 画像リライタ(両モデル)がOllamaに登録済みか */
+export async function imageRewriterInstalled(): Promise<boolean> {
+  try {
+    const res = await fetch(`${OLLAMA_URL}/api/tags`)
+    if (!res.ok) return false
+    const json = (await res.json()) as { models?: { name?: string }[] }
+    const names = (json.models ?? []).map((m) => m.name ?? '')
+    return Object.values(IMAGE_REWRITER_MODELS).every((m) => names.some((n) => n.startsWith(m!)))
+  } catch {
+    return false
+  }
+}
+
+/** 一言 → 画像本番プロンプト(選択中の画像モデルの公式仕様で展開) */
+export async function rewriteImageViaOllama(userText: string, model: ImageModel): Promise<string> {
+  const m = IMAGE_REWRITER_MODELS[model]
+  if (!m) throw new Error('このモデルはプロンプト強化に対応していません')
+  const res = await fetch(`${OLLAMA_URL}/api/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: m,
+      prompt: userText.trim(),
+      stream: false,
+      options: { temperature: 0.55, top_p: 0.9, num_predict: 700 },
+    }),
+  })
+  if (!res.ok) throw new Error(`プロンプト強化に失敗しました (${res.status})`)
+  const json = (await res.json()) as { response?: string }
+  const out = (json.response ?? '').trim()
+  if (!out) throw new Error('プロンプト強化の出力が空でした')
+  return out
 }
 
 /** 一言 → H3本番プロンプト。Ollamaで生成(system は Modelfile に焼込済み) */
