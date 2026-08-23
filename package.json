@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "docs:verify": "node scripts/verify-readme-assets.mjs",
     "lint": "oxlint",
     "test": "vitest run",
     "preview": "vite preview"
