@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { formatDuration } from '../lib/eta'
+import { translatePromptToJa } from '../lib/rewriter'
 import { useGenerationStore } from '../store/generation'
 import { useBodyScrollLock } from '../lib/useBodyScrollLock'
 
@@ -33,11 +34,34 @@ export function HistoryDetail() {
   const [zoomed, setZoomed] = useState(false)
   // 削除確認は対象ファイル名で保持(別アイテムを開くと自動的に確認解除になる)
   const [confirmFor, setConfirmFor] = useState<string | null>(null)
+  // プロンプト和訳(対象ファイル名で保持=別アイテムを開くと自動で消える)
+  const [jaText, setJaText] = useState<string | null>(null)
+  const [jaForFile, setJaForFile] = useState<string | null>(null)
+  const [translating, setTranslating] = useState(false)
   useBodyScrollLock(item != null)
 
   if (!item) return null
   const s = item.settings
   const confirmDelete = confirmFor === item.filename
+  const showJa = jaForFile === item.filename && jaText !== null
+
+  const onTranslate = async () => {
+    if (showJa) {
+      setJaText(null)
+      setJaForFile(null)
+      return
+    }
+    setTranslating(true)
+    try {
+      const t = await translatePromptToJa(item.prompt)
+      setJaText(t || '(訳が空でした)')
+    } catch {
+      setJaText('和訳に失敗しました(Ollamaと翻訳モデルを確認してください)')
+    } finally {
+      setJaForFile(item.filename)
+      setTranslating(false)
+    }
+  }
 
   return (
     <>
@@ -88,16 +112,33 @@ export function HistoryDetail() {
           <div className="mb-3">
             <div className="mb-1 flex items-center justify-between">
               <span className="text-xs font-semibold text-ink-400">プロンプト</span>
-              <button
-                onClick={() => void navigator.clipboard?.writeText(item.prompt)}
-                className="rounded border border-cream-200 px-2 py-0.5 text-[11px] font-semibold text-ink-600 hover:bg-cream-100"
-              >
-                コピー
-              </button>
+              <div className="flex gap-1.5">
+                {item.prompt.trim() && (
+                  <button
+                    onClick={() => void onTranslate()}
+                    disabled={translating}
+                    className="rounded border border-cream-200 px-2 py-0.5 text-[11px] font-semibold text-ink-600 hover:bg-cream-100 disabled:opacity-50"
+                  >
+                    {translating ? '和訳中…' : showJa ? '和訳を閉じる' : '和訳'}
+                  </button>
+                )}
+                <button
+                  onClick={() => void navigator.clipboard?.writeText(item.prompt)}
+                  className="rounded border border-cream-200 px-2 py-0.5 text-[11px] font-semibold text-ink-600 hover:bg-cream-100"
+                >
+                  コピー
+                </button>
+              </div>
             </div>
             <p className="max-h-40 overflow-y-auto whitespace-pre-wrap rounded-lg border border-cream-200 bg-cream-50 p-3 text-sm leading-relaxed">
               {item.prompt}
             </p>
+            {showJa && (
+              <div className="mt-1.5 rounded-lg border border-accent-200 bg-orange-50/60 p-3">
+                <p className="mb-1 text-[10px] font-bold tracking-wider text-accent-500">和訳(レビュー用)</p>
+                <p className="max-h-40 overflow-y-auto whitespace-pre-wrap text-sm leading-relaxed text-ink-700">{jaText}</p>
+              </div>
+            )}
           </div>
 
           <div className="mb-4">
