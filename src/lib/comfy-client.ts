@@ -237,6 +237,20 @@ export class ComfyClient {
     }
   }
 
+  /** 完了ジョブのテキスト出力(PreviewAny等の ui.text)を取得。無ければ null */
+  async fetchTextOutput(promptId: string): Promise<string | null> {
+    const res = await fetch(`${this.baseUrl}/history/${promptId}`)
+    if (!res.ok) return null
+    const json = (await res.json()) as Record<string, { outputs?: Record<string, { text?: string[] }> }>
+    const entry = json[promptId]
+    if (!entry?.outputs) return null
+    for (const nodeOutput of Object.values(entry.outputs)) {
+      const t = nodeOutput.text
+      if (Array.isArray(t) && typeof t[0] === 'string' && t[0].trim()) return t[0]
+    }
+    return null
+  }
+
   /** Civitai由来のLoRA説明メタ(名前・トリガー・ジャンル等)を取得 */
   async getLoraMeta(): Promise<LoraMetaMap> {
     try {
@@ -246,6 +260,18 @@ export class ComfyClient {
       return json.meta ?? {}
     } catch {
       return {}
+    }
+  }
+
+  /** 選択可能なCLIP/テキストエンコーダのファイル名一覧を取得(リライタ導入判定用) */
+  async getClipList(): Promise<string[]> {
+    try {
+      const res = await fetch(`${this.baseUrl}/object_info/CLIPLoader`)
+      if (!res.ok) return []
+      const json = (await res.json()) as Record<string, { input?: { required?: { clip_name?: [string[]] } } }>
+      return json['CLIPLoader']?.input?.required?.clip_name?.[0] ?? []
+    } catch {
+      return []
     }
   }
 

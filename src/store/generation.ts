@@ -6,6 +6,7 @@ import { buildImageWorkflow } from '../lib/image-workflow'
 import { classifyLora } from '../lib/lora'
 import { imageRecommendedParams, videoRecommendedParams } from '../lib/presets'
 import { randomSeed } from '../lib/seed'
+import { buildRewriteWorkflow, REWRITER_MODEL } from '../lib/rewriter'
 import { patchWorkflow } from '../lib/workflow-patcher'
 import type { GenerationMode, GenerationParams, ImageModel, ImageParams, LoraMetaMap } from '../lib/types'
 
@@ -90,6 +91,16 @@ interface GenerationState {
   guideOpen: boolean
   /** LoRAカタログ(サムネ付き一覧)の表示状態 */
   loraCatalogOpen: boolean
+  /** プロンプト自動強化(H3リライタ)が導入済みか */
+  rewriterAvailable: boolean
+  /** リライト実行中 */
+  rewriting: boolean
+  /** リライト前のプロンプト(元に戻す用。null=戻す先なし) */
+  rewriteUndo: string | null
+  /** 一言 → H3本番プロンプトへ自動強化(動画タブ) */
+  rewritePrompt: () => Promise<void>
+  /** リライト結果を取り消して元のプロンプトに戻す */
+  undoRewrite: () => void
   /** シードを生成ごとにランダムにするか(動画/画像それぞれ) */
   videoSeedRandom: boolean
   imageSeedRandom: boolean
@@ -213,6 +224,9 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
 
   guideOpen: localStorage.getItem('frameweaver-guide-seen') !== '1',
   loraCatalogOpen: false,
+  rewriterAvailable: false,
+  rewriting: false,
+  rewriteUndo: null,
   videoSeedRandom: true,
   imageSeedRandom: true,
 
@@ -222,6 +236,42 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
   setGuideOpen: (open) => {
     if (!open) localStorage.setItem('frameweaver-guide-seen', '1')
     set({ guideOpen: open })
+  },
+
+  rewritePrompt: async () => {
+    const { params, rewriting } = get()
+    const text = params.prompt.trim()
+    if (rewriting) return
+    if (!text) {
+      set({ error: '強化する一言(何を作りたいか)を先に入力してください' })
+      return
+    }
+    set({ rewriting: true, error: null })
+    try {
+      const wf = buildRewriteWorkflow(text, params.mode, params.lengthSec)
+      const promptId = await client.submit(wf)
+      // 初回はモデル読込(17.5GB・RAMオフロード)で数分かかることがある。10分まで待つ
+      const deadline = Date.now() + 10 * 60 * 1000
+      while (Date.now() < deadline) {
+        const out = await client.fetchTextOutput(promptId)
+        if (out) {
+          set((s) => ({
+            rewriting: false,
+            rewriteUndo: s.params.prompt,
+            params: { ...s.params, prompt: out.trim() },
+          }))
+          return
+        }
+        await new Promise((r) => setTimeout(r, 2000))
+      }
+      set({ rewriting: false, error: 'プロンプト強化がタイムアウトしました(ComfyUIのログを確認してください)' })
+    } catch (e) {
+      set({ rewriting: false, error: e instanceof Error ? e.message : String(e) })
+    }
+  },
+
+  undoRewrite: () => {
+    set((s) => (s.rewriteUndo === null ? s : { params: { ...s.params, prompt: s.rewriteUndo }, rewriteUndo: null }))
   },
 
   setLoraCatalogOpen: (open) => {
@@ -562,6 +612,9 @@ client.onEvent((ev) => {
         void client.getLoraList().then((loraList) => useGenerationStore.setState({ loraList }))
         void client.getCheckpointList().then((checkpointList) => useGenerationStore.setState({ checkpointList }))
         void client.getLoraMeta().then((loraMeta) => useGenerationStore.setState({ loraMeta }))
+        void client
+          .getClipList()
+          .then((list) => useGenerationStore.setState({ rewriterAvailable: list.includes(REWRITER_MODEL) }))
         void useGenerationStore.getState().reloadFolder()
       }
       if (ev.message === 'disconnected') useGenerationStore.setState({ connected: false })
