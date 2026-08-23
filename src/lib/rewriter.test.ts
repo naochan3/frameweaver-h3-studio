@@ -32,6 +32,14 @@ describe('rewriter output contracts', () => {
     expect(() => validateVideoRewrite(video.replace('00:03.500', '00:05.001'), 5)).toThrow('動画尺')
   })
 
+  it.each([
+    ['first', 'For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.'],
+    ['first_last', 'How the reference pictures align with the target video — Picture 1 (from Shot 1) aligns with the 0.00-second mark of the target video; Picture 2 (from Shot 2) aligns with the 5.00-second mark of the target video.'],
+    ['last', 'How the reference pictures align with the target video — <Picture 1> (from [Shot 2]) aligns with the 5.00-second mark of the target video.'],
+  ] as const)('accepts the required %s alignment line', (mode, alignment) => {
+    expect(validateVideoRewrite(`${alignment}\n\n${video}`, 5, mode)).toContain(alignment)
+  })
+
   it('preserves requested Japanese visible text while requiring English prose', () => {
     const words = Array.from({ length: 60 }, (_, index) => `detail${index}`).join(' ')
     const output = `A storefront sign reads "営業中" clearly. ${words}`

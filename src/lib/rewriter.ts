@@ -133,10 +133,24 @@ export function validateImageRewrite(output: string, input: string, model: Image
   return text
 }
 
-export function validateVideoRewrite(output: string, durationSec: number): string {
+export function validateVideoRewrite(output: string, durationSec: number, mode: GenerationMode = 'text'): string {
   const text = output.trim()
   const fields = ['integrated_multimodal_description:', 'overall_soundscape:', 'non_diegetic_music:']
-  const lines = text.split(/\r?\n/)
+  let body = text
+  if (mode !== 'text') {
+    const sections = text.split(/\r?\n\r?\n/)
+    if (sections.length !== 2 || sections[0].includes('\n')) throw new Error('プロンプト強化の参照画像アラインメントが不正です')
+    const alignment = sections[0]
+    const end = durationSec.toFixed(2)
+    const valid = mode === 'first'
+      ? /^For the target video, at 0\.00 seconds into the target video, <Picture 1> \(from \[Shot 1\]\) is fully referenced\.$/.test(alignment)
+      : mode === 'first_last'
+        ? new RegExp(`^How the reference pictures align with the target video — Picture 1 \\(from Shot 1\\) aligns with the 0\\.00-second mark of the target video; Picture 2 \\(from Shot \\d+\\) aligns with the ${end.replace('.', '\\.')}\\-second mark of the target video\\.$`).test(alignment)
+        : new RegExp(`^How the reference pictures align with the target video — <Picture 1> \\(from \\[Shot \\d+\\]\\) aligns with the ${end.replace('.', '\\.')}\\-second mark of the target video\\.$`).test(alignment)
+    if (!valid) throw new Error('プロンプト強化の参照画像アラインメントが不正です')
+    body = sections[1]
+  }
+  const lines = body.split(/\r?\n/)
   if (lines.length !== fields.length || fields.some((field, index) => !lines[index].startsWith(field) || !lines[index].slice(field.length).trim())) {
     throw new Error('プロンプト強化の出力形式が不正です')
   }
@@ -203,5 +217,5 @@ export async function rewriteViaOllama(userText: string, mode: GenerationMode, l
   const json = (await res.json()) as { response?: string }
   const out = (json.response ?? '').trim()
   if (!out) throw new Error('プロンプト強化の出力が空でした')
-  return validateVideoRewrite(out, lengthSec)
+  return validateVideoRewrite(out, lengthSec, mode)
 }
