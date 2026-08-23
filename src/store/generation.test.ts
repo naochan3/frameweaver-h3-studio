@@ -70,3 +70,53 @@ describe('RECENT のプロンプト補完(reloadFolder)', () => {
     expect(items[0].prompt).toBe('embedded prompt')
   })
 })
+
+describe('非同期プロンプト強化の競合防止', () => {
+  it('強化中に動画条件を編集した場合は古い応答で上書きしない', async () => {
+    let resolveFetch!: (value: unknown) => void
+    vi.stubGlobal('fetch', () => new Promise((resolve) => { resolveFetch = resolve }))
+    store.useGenerationStore.setState((s) => ({
+      params: { ...s.params, prompt: 'original', mode: 'text', lengthSec: 5 },
+      rewriting: false,
+    }))
+
+    const pending = store.useGenerationStore.getState().rewritePrompt()
+    store.useGenerationStore.getState().setParams({ prompt: 'edited while waiting' })
+    resolveFetch({
+      ok: true,
+      json: async () => ({ response: 'integrated_multimodal_description: At 00:00.000 subject appears.\noverall_soundscape: quiet room tone.\nnon_diegetic_music: none.' }),
+    })
+    await pending
+
+    expect(store.useGenerationStore.getState().params.prompt).toBe('edited while waiting')
+    expect(store.useGenerationStore.getState().rewriteUndo).toBeNull()
+    expect(store.useGenerationStore.getState().rewriting).toBe(false)
+  })
+
+  it('強化中に画像モデルを変更した場合は古い応答で上書きしない', async () => {
+    let resolveFetch!: (value: unknown) => void
+    let call = 0
+    vi.stubGlobal('fetch', () => {
+      call += 1
+      if (call === 1) return new Promise((resolve) => { resolveFetch = resolve })
+      return Promise.resolve(Response.json({ models: ['fw-rewriter-zimage'] }))
+    })
+    store.useGenerationStore.setState((s) => ({
+      imageParams: { ...s.imageParams, prompt: 'original image', model: 'krea2' },
+      imageRewriting: false,
+    }))
+
+    const pending = store.useGenerationStore.getState().rewriteImagePrompt()
+    store.useGenerationStore.getState().setImageModel('zimage')
+    resolveFetch({
+      ok: true,
+      json: async () => ({ response: Array.from({ length: 90 }, (_, i) => `detail${i}`).join(' ') }),
+    })
+    await pending
+
+    expect(store.useGenerationStore.getState().imageParams.model).toBe('zimage')
+    expect(store.useGenerationStore.getState().imageParams.prompt).toBe('original image')
+    expect(store.useGenerationStore.getState().imageRewriteUndo).toBeNull()
+    expect(store.useGenerationStore.getState().imageRewriting).toBe(false)
+  })
+})

@@ -253,6 +253,7 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
   rewritePrompt: async () => {
     const { params, rewriting } = get()
     const text = params.prompt.trim()
+    const request = { prompt: params.prompt, mode: params.mode, lengthSec: params.lengthSec }
     if (rewriting) return
     if (!text) {
       set({ error: '強化する一言(何を作りたいか)を先に入力してください' })
@@ -264,8 +265,9 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
       const out = await rewriteViaOllama(text, params.mode, params.lengthSec)
       set((s) => ({
         rewriting: false,
-        rewriteUndo: s.params.prompt,
-        params: { ...s.params, prompt: out },
+        ...(s.params.prompt === request.prompt && s.params.mode === request.mode && s.params.lengthSec === request.lengthSec
+          ? { rewriteUndo: request.prompt, params: { ...s.params, prompt: out } }
+          : {}),
       }))
     } catch (e) {
       set({ rewriting: false, error: e instanceof Error ? e.message : String(e) })
@@ -279,6 +281,7 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
   rewriteImagePrompt: async () => {
     const { imageParams, imageRewriting } = get()
     const text = imageParams.prompt.trim()
+    const request = { prompt: imageParams.prompt, model: imageParams.model }
     if (imageRewriting) return
     if (!text) {
       set({ error: '強化する一言(何を描きたいか)を先に入力してください' })
@@ -289,8 +292,9 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
       const out = await rewriteImageViaOllama(text, imageParams.model)
       set((s) => ({
         imageRewriting: false,
-        imageRewriteUndo: s.imageParams.prompt,
-        imageParams: { ...s.imageParams, prompt: out },
+        ...(s.imageParams.prompt === request.prompt && s.imageParams.model === request.model
+          ? { imageRewriteUndo: request.prompt, imageParams: { ...s.imageParams, prompt: out } }
+          : {}),
       }))
     } catch (e) {
       set({ imageRewriting: false, error: e instanceof Error ? e.message : String(e) })
@@ -331,14 +335,22 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
         imageParams: { ...s.imageParams, ...base, model: nextModel, extraLora: comfyName, extraLoraStrength: 1.0 },
       }
     })
+    const selectedModel = get().imageParams.model
+    void imageRewriterInstalled(selectedModel).then((ok) => {
+      if (get().imageParams.model === selectedModel) set({ imageRewriterAvailable: ok })
+    })
   },
 
   setAppTab: (tab) => set({ appTab: tab }),
 
   setImageParams: (patch) => set((s) => ({ imageParams: { ...s.imageParams, ...patch } })),
 
-  setImageModel: (model) =>
-    set((s) => ({ imageParams: { ...s.imageParams, ...imageRecommendedParams(model) } })),
+  setImageModel: (model) => {
+    set((s) => ({ imageParams: { ...s.imageParams, ...imageRecommendedParams(model) } }))
+    void imageRewriterInstalled(model).then((ok) => {
+      if (get().imageParams.model === model) set({ imageRewriterAvailable: ok })
+    })
+  },
 
   resetVideoRecommended: () =>
     set((s) => ({ params: { ...s.params, ...videoRecommendedParams() } })),
@@ -662,7 +674,12 @@ client.onEvent((ev) => {
         void client.getCheckpointList().then((checkpointList) => useGenerationStore.setState({ checkpointList }))
         void client.getLoraMeta().then((loraMeta) => useGenerationStore.setState({ loraMeta }))
         void rewriterInstalled().then((ok) => useGenerationStore.setState({ rewriterAvailable: ok }))
-        void imageRewriterInstalled().then((ok) => useGenerationStore.setState({ imageRewriterAvailable: ok }))
+        const imageModel = useGenerationStore.getState().imageParams.model
+        void imageRewriterInstalled(imageModel).then((ok) => {
+          if (useGenerationStore.getState().imageParams.model === imageModel) {
+            useGenerationStore.setState({ imageRewriterAvailable: ok })
+          }
+        })
         void useGenerationStore.getState().reloadFolder()
       }
       if (ev.message === 'disconnected') useGenerationStore.setState({ connected: false })

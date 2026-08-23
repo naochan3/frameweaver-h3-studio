@@ -6,9 +6,8 @@ import type { GenerationMode, ImageModel } from './types'
 export const OLLAMA_MODEL = 'frameweaver-rewriter'
 
 /** 同一オリジンの /ollama(Viteプロキシ経由)→ 127.0.0.1:11434。LAN内の別端末でも同じURLで届く */
-export const OLLAMA_URL =
-  import.meta.env.VITE_OLLAMA_URL ??
-  (typeof location !== 'undefined' ? `${location.origin}/ollama` : 'http://127.0.0.1:11434')
+export const OLLAMA_URL = import.meta.env.VITE_REWRITER_URL ?? '/rewriter'
+const CLIENT_TIMEOUT_MS = 190_000
 
 /** モード → リライタのタスク名(Ref2VAは学習対象外のため非対応) */
 const TASK_NAME: Partial<Record<GenerationMode, string>> = {
@@ -80,10 +79,10 @@ function buildUserPrompt(userText: string, mode: GenerationMode, lengthSec: numb
 /** Ollamaにモデルが登録されているか(=強化ボタン表示可否) */
 export async function rewriterInstalled(): Promise<boolean> {
   try {
-    const res = await fetch(`${OLLAMA_URL}/api/tags`, { method: 'GET' })
+    const res = await fetch(`${OLLAMA_URL}/models`, { method: 'GET', signal: AbortSignal.timeout(CLIENT_TIMEOUT_MS) })
     if (!res.ok) return false
-    const json = (await res.json()) as { models?: { name?: string }[] }
-    return (json.models ?? []).some((m) => (m.name ?? '').startsWith(OLLAMA_MODEL))
+    const json = (await res.json()) as { models?: string[] }
+    return (json.models ?? []).includes(OLLAMA_MODEL)
   } catch {
     return false
   }
@@ -101,34 +100,72 @@ export function imageRewriterSupports(model: ImageModel): boolean {
 }
 
 /** 画像リライタ(両モデル)がOllamaに登録済みか */
-export async function imageRewriterInstalled(): Promise<boolean> {
+export async function imageRewriterInstalled(model: ImageModel): Promise<boolean> {
+  const expected = IMAGE_REWRITER_MODELS[model]
+  if (!expected) return false
   try {
-    const res = await fetch(`${OLLAMA_URL}/api/tags`)
+    const res = await fetch(`${OLLAMA_URL}/models`, { signal: AbortSignal.timeout(CLIENT_TIMEOUT_MS) })
     if (!res.ok) return false
-    const json = (await res.json()) as { models?: { name?: string }[] }
-    const names = (json.models ?? []).map((m) => m.name ?? '')
-    return Object.values(IMAGE_REWRITER_MODELS).every((m) => names.some((n) => n.startsWith(m!)))
+    const json = (await res.json()) as { models?: string[] }
+    return (json.models ?? []).includes(expected)
   } catch {
     return false
   }
 }
 
-// ひらがな/カタカナ/漢字/ハングル。画像プロンプトは英語のみが正しいので混入を弾く
+// ひらがな/カタカナ/漢字/ハングル。引用された表示文字以外への混入を弾く
 const CJK_RE = /[぀-ヿ㐀-鿿가-힯]/
 
-/** 残った日本語/中国語/韓国語の文字を除去し、余分な空白を詰める(最終手段) */
-function stripCjk(text: string): string {
+function requestedVisibleText(input: string): Set<string> {
+  return new Set([...input.matchAll(/[「『]([^」』]+)[」』]/g)].map((match) => match[1]))
+}
+
+export function validateImageRewrite(output: string, input: string, model: ImageModel): string {
+  const text = output.trim()
+  if (!text || /\r?\n/.test(text)) throw new Error('プロンプト強化の出力形式が単一段落ではありません')
+  const allowed = requestedVisibleText(input)
+  const prose = text.replace(/"([^"]*)"/g, (quoted, value: string) => (allowed.has(value) ? '' : quoted))
+  if (CJK_RE.test(prose)) throw new Error('プロンプト強化に英語以外の文字が残っています')
+  const words = text.match(/[A-Za-z0-9]+(?:[-'][A-Za-z0-9]+)*/g)?.length ?? 0
+  const minimum = model === 'zimage' ? 80 : 60
+  const maximum = model === 'zimage' ? 200 : 700
+  if (words < minimum || words > maximum) throw new Error(`プロンプト強化の語数が範囲外です (${words})`)
   return text
-    .replace(/[぀-ヿ㐀-鿿가-힯＀-￯]/g, '')
-    .replace(/\s{2,}/g, ' ')
-    .replace(/\s+([,.;:])/g, '$1')
-    .trim()
+}
+
+export function validateVideoRewrite(output: string, durationSec: number, mode: GenerationMode = 'text'): string {
+  const text = output.trim()
+  const fields = ['integrated_multimodal_description:', 'overall_soundscape:', 'non_diegetic_music:']
+  let body = text
+  if (mode !== 'text') {
+    const sections = text.split(/\r?\n\r?\n/)
+    if (sections.length !== 2 || sections[0].includes('\n')) throw new Error('プロンプト強化の参照画像アラインメントが不正です')
+    const alignment = sections[0]
+    const end = durationSec.toFixed(2)
+    const valid = mode === 'first'
+      ? /^For the target video, at 0\.00 seconds into the target video, <Picture 1> \(from \[Shot 1\]\) is fully referenced\.$/.test(alignment)
+      : mode === 'first_last'
+        ? new RegExp(`^How the reference pictures align with the target video — Picture 1 \\(from Shot 1\\) aligns with the 0\\.00-second mark of the target video; Picture 2 \\(from Shot \\d+\\) aligns with the ${end.replace('.', '\\.')}\\-second mark of the target video\\.$`).test(alignment)
+        : new RegExp(`^How the reference pictures align with the target video — <Picture 1> \\(from \\[Shot \\d+\\]\\) aligns with the ${end.replace('.', '\\.')}\\-second mark of the target video\\.$`).test(alignment)
+    if (!valid) throw new Error('プロンプト強化の参照画像アラインメントが不正です')
+    body = sections[1]
+  }
+  const lines = body.split(/\r?\n/)
+  if (lines.length !== fields.length || fields.some((field, index) => !lines[index].startsWith(field) || !lines[index].slice(field.length).trim())) {
+    throw new Error('プロンプト強化の出力形式が不正です')
+  }
+  for (const match of text.matchAll(/At\s+(\d{2}):(\d{2}\.\d{3})/g)) {
+    const seconds = Number(match[1]) * 60 + Number(match[2])
+    if (seconds >= durationSec) throw new Error('プロンプト強化のShot時刻が動画尺を超えています')
+  }
+  return text
 }
 
 async function callImageRewriter(model: string, prompt: string): Promise<string> {
-  const res = await fetch(`${OLLAMA_URL}/api/generate`, {
+  const res = await fetch(`${OLLAMA_URL}/generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    signal: AbortSignal.timeout(CLIENT_TIMEOUT_MS),
     body: JSON.stringify({
       model,
       prompt,
@@ -150,23 +187,25 @@ export async function rewriteImageViaOllama(userText: string, model: ImageModel)
   const idea = userText.trim()
 
   let out = await callImageRewriter(m, idea)
-  if (CJK_RE.test(out)) {
+  try {
+    return validateImageRewrite(out, idea, model)
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes('英語以外')) throw error
     // 英語強制を明示してもう一度だけ
     out = await callImageRewriter(
       m,
       `${idea}\n\n(Write the entire prompt in English only. Do NOT use any Japanese, Chinese, or Korean characters.)`,
     )
   }
-  if (CJK_RE.test(out)) out = stripCjk(out)
-  if (!out) throw new Error('プロンプト強化の出力が空でした')
-  return out
+  return validateImageRewrite(out, idea, model)
 }
 
 /** 一言 → H3本番プロンプト。Ollamaで生成(system は Modelfile に焼込済み) */
 export async function rewriteViaOllama(userText: string, mode: GenerationMode, lengthSec: number): Promise<string> {
-  const res = await fetch(`${OLLAMA_URL}/api/generate`, {
+  const res = await fetch(`${OLLAMA_URL}/generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    signal: AbortSignal.timeout(CLIENT_TIMEOUT_MS),
     body: JSON.stringify({
       model: OLLAMA_MODEL,
       prompt: buildUserPrompt(userText, mode, lengthSec),
@@ -178,5 +217,5 @@ export async function rewriteViaOllama(userText: string, mode: GenerationMode, l
   const json = (await res.json()) as { response?: string }
   const out = (json.response ?? '').trim()
   if (!out) throw new Error('プロンプト強化の出力が空でした')
-  return out
+  return validateVideoRewrite(out, lengthSec, mode)
 }
