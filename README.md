@@ -5,7 +5,7 @@
 ![React](https://img.shields.io/badge/React-19-149eca?logo=react&logoColor=white)
 ![ComfyUI](https://img.shields.io/badge/Backend-ComfyUI-222222)
 ![Tailscale](https://img.shields.io/badge/Remote-Tailscale-242424?logo=tailscale&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-89%20passing-2f855a)
+![Tests](https://img.shields.io/badge/tests-Vitest-2f855a)
 
 ![FrameWeaver H3 Studio desktop UI](docs/assets/readme/studio-desktop.png)
 
@@ -157,7 +157,7 @@ WebUIは `0.0.0.0` 待受。同じネットワークの端末から `http://<PC�
 
 ### Tailscale経由で、どこからでも開く
 
-ローカルの5180だけをTailscale Serveでtailnet内HTTPSへ中継します。ComfyUIやOllamaの管理ポートは直接公開しません。
+FrameWeaverの5180だけをTailscale Serveでtailnet内HTTPSへ中継します。ComfyUIやOllamaの管理ポートは直接公開しません。
 
 ```powershell
 tailscale serve --bg --https=10000 http://127.0.0.1:5180

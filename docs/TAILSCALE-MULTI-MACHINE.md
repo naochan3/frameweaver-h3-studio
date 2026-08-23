@@ -45,6 +45,12 @@ Invoke-WebRequest http://127.0.0.1:5180 -Headers @{ Accept = 'text/html' }
 
 Tailscaleへログイン済みのホストPCで実行します。
 
+tailnetだけに限定したい場合は、WebUIをloopback待受で起動します（通常の `npm run dev` はLANからも接続できる設定です）。
+
+```powershell
+npm run dev -- --host 127.0.0.1
+```
+
 ```powershell
 tailscale serve --bg --https=10000 http://127.0.0.1:5180
 tailscale serve status
