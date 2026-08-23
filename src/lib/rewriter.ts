@@ -116,6 +116,19 @@ export async function imageRewriterInstalled(model: ImageModel): Promise<boolean
 // ひらがな/カタカナ/漢字/ハングル。引用された表示文字以外への混入を弾く
 const CJK_RE = /[぀-ヿ㐀-鿿가-힯]/
 
+/** 残った日本語/中国語/韓国語の文字を除去し、余分な空白を詰める(最終手段) */
+function stripCjk(text: string): string {
+  return text
+    .replace(/[぀-ヿ㐀-鿿가-힯＀-￯]/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\s+([,.;:])/g, '$1')
+    .trim()
+}
+
+function isCjkError(error: unknown): boolean {
+  return error instanceof Error && error.message.includes('英語以外')
+}
+
 function requestedVisibleText(input: string): Set<string> {
   return new Set([...input.matchAll(/[「『]([^」』]+)[」』]/g)].map((match) => match[1]))
 }
@@ -190,14 +203,20 @@ export async function rewriteImageViaOllama(userText: string, model: ImageModel)
   try {
     return validateImageRewrite(out, idea, model)
   } catch (error) {
-    if (!(error instanceof Error) || !error.message.includes('英語以外')) throw error
+    if (!isCjkError(error)) throw error
     // 英語強制を明示してもう一度だけ
     out = await callImageRewriter(
       m,
       `${idea}\n\n(Write the entire prompt in English only. Do NOT use any Japanese, Chinese, or Korean characters.)`,
     )
   }
-  return validateImageRewrite(out, idea, model)
+  try {
+    return validateImageRewrite(out, idea, model)
+  } catch (error) {
+    if (!isCjkError(error)) throw error
+    // 最終手段: それでも残るCJKは除去して英語のみで返す(エラーで止めずユーザーは必ず結果を得る)
+    return stripCjk(out)
+  }
 }
 
 /** 一言 → H3本番プロンプト。Ollamaで生成(system は Modelfile に焼込済み) */
