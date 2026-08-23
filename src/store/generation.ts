@@ -6,7 +6,7 @@ import { buildImageWorkflow } from '../lib/image-workflow'
 import { classifyLora } from '../lib/lora'
 import { imageRecommendedParams, videoRecommendedParams } from '../lib/presets'
 import { randomSeed } from '../lib/seed'
-import { buildRewriteWorkflow, REWRITER_MODEL } from '../lib/rewriter'
+import { rewriteViaOllama, rewriterInstalled } from '../lib/rewriter'
 import { patchWorkflow } from '../lib/workflow-patcher'
 import type { GenerationMode, GenerationParams, ImageModel, ImageParams, LoraMetaMap } from '../lib/types'
 
@@ -248,23 +248,13 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
     }
     set({ rewriting: true, error: null })
     try {
-      const wf = buildRewriteWorkflow(text, params.mode, params.lengthSec)
-      const promptId = await client.submit(wf)
-      // 初回はモデル読込(17.5GB・RAMオフロード)で数分かかることがある。10分まで待つ
-      const deadline = Date.now() + 10 * 60 * 1000
-      while (Date.now() < deadline) {
-        const out = await client.fetchTextOutput(promptId)
-        if (out) {
-          set((s) => ({
-            rewriting: false,
-            rewriteUndo: s.params.prompt,
-            params: { ...s.params, prompt: out.trim() },
-          }))
-          return
-        }
-        await new Promise((r) => setTimeout(r, 2000))
-      }
-      set({ rewriting: false, error: 'プロンプト強化がタイムアウトしました(ComfyUIのログを確認してください)' })
+      // 軽量Ollama(Q8 8.7GB)で生成。初回のみモデル常駐化で少し待つ程度
+      const out = await rewriteViaOllama(text, params.mode, params.lengthSec)
+      set((s) => ({
+        rewriting: false,
+        rewriteUndo: s.params.prompt,
+        params: { ...s.params, prompt: out },
+      }))
     } catch (e) {
       set({ rewriting: false, error: e instanceof Error ? e.message : String(e) })
     }
@@ -612,9 +602,7 @@ client.onEvent((ev) => {
         void client.getLoraList().then((loraList) => useGenerationStore.setState({ loraList }))
         void client.getCheckpointList().then((checkpointList) => useGenerationStore.setState({ checkpointList }))
         void client.getLoraMeta().then((loraMeta) => useGenerationStore.setState({ loraMeta }))
-        void client
-          .getClipList()
-          .then((list) => useGenerationStore.setState({ rewriterAvailable: list.includes(REWRITER_MODEL) }))
+        void rewriterInstalled().then((ok) => useGenerationStore.setState({ rewriterAvailable: ok }))
         void useGenerationStore.getState().reloadFolder()
       }
       if (ev.message === 'disconnected') useGenerationStore.setState({ connected: false })

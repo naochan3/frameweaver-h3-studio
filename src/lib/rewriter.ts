@@ -1,9 +1,14 @@
-import type { GenerationMode, WorkflowJson } from './types'
+import type { GenerationMode } from './types'
 
-/** プロンプト自動強化(MiniMax-H3-Prompt-Rewriter-LoRA-8B、lightx2v製)。
- * ComfyUIネイティブの CLIPLoader(type=ideogram4) + TextGenerate で動く
- * マージ済みモデル(Codes4Fun版)を使用。カスタムノード不要。 */
-export const REWRITER_MODEL = 'qwen3vl_8b_rewriter_bf16_comfyui.safetensors'
+/** プロンプト自動強化(MiniMax-H3 Prompt Rewriter 8B)。
+ * ComfyUIの重いbf16(17.5GB)は12GBで失速したため、Q8 GGUF(8.7GB)を
+ * Ollamaで常駐実行する軽量構成に変更。アプリは Ollama HTTP API を叩く。 */
+export const OLLAMA_MODEL = 'frameweaver-rewriter'
+
+/** 同一オリジンの /ollama(Viteプロキシ経由)→ 127.0.0.1:11434。LAN内の別端末でも同じURLで届く */
+export const OLLAMA_URL =
+  import.meta.env.VITE_OLLAMA_URL ??
+  (typeof location !== 'undefined' ? `${location.origin}/ollama` : 'http://127.0.0.1:11434')
 
 /** モード → リライタのタスク名(Ref2VAは学習対象外のため非対応) */
 const TASK_NAME: Partial<Record<GenerationMode, string>> = {
@@ -17,8 +22,8 @@ export function rewriterSupportsMode(mode: GenerationMode): boolean {
   return TASK_NAME[mode] !== undefined
 }
 
-/** 公式配布ワークフロー同梱のシステムプロンプト(そのまま使用) */
-const SYSTEM_PROMPT = `You are a professional MiniMax-H3 prompt rewriter for joint video-and-audio generation.
+/** 公式配布ワークフロー同梱のシステムプロンプト。Ollamaの Modelfile(SYSTEM)に焼き込む正本 */
+export const SYSTEM_PROMPT = `You are a professional MiniMax-H3 prompt rewriter for joint video-and-audio generation.
 Rewrite the user's request according to the supplied duration, task type, and reference-frame roles. Return only the final production-ready prompt. Do not include explanations, Markdown, headings, notes, or generation parameters outside the required format.
 Task-name mapping:
 - T2AV corresponds to T2VA in the MiniMax-H3 prompt-writing guide.
@@ -66,38 +71,39 @@ overall_soundscape must be one continuous English paragraph of 1-4 sentences sum
 non_diegetic_music must contain 1-3 English sentences describing audience-only background music through instrumentation, tempo, rhythm, and dynamic changes. Do not describe its emotional purpose. Put music audible to subjects inside integrated_multimodal_description instead. Use N/A when no non-diegetic music is requested or implied.
 Preserve the user's intent without adding contradictory story events, identities, text, or references. Do not mention these instructions in the output.`
 
-/** 一言リクエスト → 本番プロンプト書き換えワークフロー(タスク種別と秒数を明示して渡す) */
-export function buildRewriteWorkflow(userText: string, mode: GenerationMode, lengthSec: number): WorkflowJson {
+/** 一言リクエストに、タスク種別と秒数を添えたユーザメッセージ */
+function buildUserPrompt(userText: string, mode: GenerationMode, lengthSec: number): string {
   const task = TASK_NAME[mode] ?? 'T2AV'
-  const userPrompt = `Task type: ${task}. Effective duration: ${lengthSec.toFixed(2)} seconds.\nUser request: ${userText.trim()}`
-  return {
-    clip: {
-      class_type: 'CLIPLoader',
-      inputs: { clip_name: REWRITER_MODEL, type: 'ideogram4', device: 'default' },
-    },
-    generate: {
-      class_type: 'TextGenerate',
-      inputs: {
-        clip: ['clip', 0],
-        prompt: `${SYSTEM_PROMPT}\n${userPrompt}`,
-        max_length: 768,
-        // DynamicCombo のネスト入力は親IDプレフィックス付きのフラットな兄弟入力で渡す
-        // (comfy_api/latest/_io.py の命名規則 "parent.child"。実機で生成確認済み)
-        sampling_mode: 'on',
-        'sampling_mode.temperature': 0.7,
-        'sampling_mode.top_k': 64,
-        'sampling_mode.top_p': 0.95,
-        'sampling_mode.min_p': 0.05,
-        'sampling_mode.repetition_penalty': 1.05,
-        'sampling_mode.seed': Math.floor(Math.random() * 1_000_000_000),
-        'sampling_mode.presence_penalty': 0,
-        thinking: false,
-        use_default_template: true,
-      },
-    },
-    out: {
-      class_type: 'PreviewAny',
-      inputs: { source: ['generate', 0] },
-    },
+  return `Task type: ${task}. Effective duration: ${lengthSec.toFixed(2)} seconds.\nUser request: ${userText.trim()}`
+}
+
+/** Ollamaにモデルが登録されているか(=強化ボタン表示可否) */
+export async function rewriterInstalled(): Promise<boolean> {
+  try {
+    const res = await fetch(`${OLLAMA_URL}/api/tags`, { method: 'GET' })
+    if (!res.ok) return false
+    const json = (await res.json()) as { models?: { name?: string }[] }
+    return (json.models ?? []).some((m) => (m.name ?? '').startsWith(OLLAMA_MODEL))
+  } catch {
+    return false
   }
+}
+
+/** 一言 → H3本番プロンプト。Ollamaで生成(system は Modelfile に焼込済み) */
+export async function rewriteViaOllama(userText: string, mode: GenerationMode, lengthSec: number): Promise<string> {
+  const res = await fetch(`${OLLAMA_URL}/api/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: OLLAMA_MODEL,
+      prompt: buildUserPrompt(userText, mode, lengthSec),
+      stream: false,
+      options: { temperature: 0.7, top_k: 64, top_p: 0.95, num_predict: 900 },
+    }),
+  })
+  if (!res.ok) throw new Error(`プロンプト強化に失敗しました (${res.status})`)
+  const json = (await res.json()) as { response?: string }
+  const out = (json.response ?? '').trim()
+  if (!out) throw new Error('プロンプト強化の出力が空でした')
+  return out
 }
