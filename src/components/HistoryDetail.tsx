@@ -29,11 +29,15 @@ export function HistoryDetail() {
   const closeDetail = useGenerationStore((s) => s.closeDetail)
   const applyHistorySettings = useGenerationStore((s) => s.applyHistorySettings)
   const sendImageToSource = useGenerationStore((s) => s.sendImageToSource)
+  const deleteOutput = useGenerationStore((s) => s.deleteOutput)
   const [zoomed, setZoomed] = useState(false)
+  // 削除確認は対象ファイル名で保持(別アイテムを開くと自動的に確認解除になる)
+  const [confirmFor, setConfirmFor] = useState<string | null>(null)
   useBodyScrollLock(item != null)
 
   if (!item) return null
   const s = item.settings
+  const confirmDelete = confirmFor === item.filename
 
   return (
     <>
@@ -142,6 +146,30 @@ export function HistoryDetail() {
             >
               {item.kind === 'image' ? '画像を保存' : '動画を保存'}
             </a>
+            {confirmDelete ? (
+              <div className="ml-auto flex items-center gap-2">
+                <span className="text-xs font-semibold text-red-600">元に戻せません。削除しますか?</span>
+                <button
+                  onClick={() => void deleteOutput(item)}
+                  className="rounded-lg bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-700"
+                >
+                  削除する
+                </button>
+                <button
+                  onClick={() => setConfirmFor(null)}
+                  className="rounded-lg border border-cream-200 px-3 py-2 text-sm font-semibold text-ink-600 hover:bg-cream-100"
+                >
+                  やめる
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setConfirmFor(item.filename)}
+                className="ml-auto rounded-lg border border-red-200 px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50"
+              >
+                削除
+              </button>
+            )}
           </div>
         </div>
       </div>

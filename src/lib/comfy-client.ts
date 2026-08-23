@@ -186,6 +186,20 @@ export class ComfyClient {
     }
   }
 
+  /** 出力フォルダの生成物を1件削除(カスタムノード frameweaver_openfolder が必要) */
+  async deleteOutput(subdir: string, filename: string): Promise<boolean> {
+    try {
+      const res = await fetch(`${this.baseUrl}/frameweaver/delete_output`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subdir, filename }),
+      })
+      return res.ok
+    } catch {
+      return false
+    }
+  }
+
   async freeMemory(): Promise<void> {
     await fetch(`${this.baseUrl}/free`, {
       method: 'POST',

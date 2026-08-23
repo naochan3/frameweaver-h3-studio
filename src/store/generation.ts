@@ -140,6 +140,8 @@ interface GenerationState {
   closeDetail: () => void
   /** 履歴アイテムのプロンプト・設定を編集画面に読み込む */
   applyHistorySettings: (item: HistoryItem) => void
+  /** 生成物を削除(出力ファイル+履歴+一覧から除去) */
+  deleteOutput: (item: HistoryItem) => Promise<void>
   removeSource: (index: number) => void
   generate: () => Promise<void>
   stop: () => Promise<void>
@@ -475,6 +477,24 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
         },
       }))
     }
+  },
+
+  deleteOutput: async (item) => {
+    const subdir = item.kind === 'video' ? 'video' : item.mode
+    const ok = await client.deleteOutput(subdir, item.filename)
+    if (!ok) {
+      set({ error: '削除に失敗しました(カスタムノードの再起動が必要な場合があります)' })
+      return
+    }
+    set((s) => {
+      const history = s.history.filter((h) => h.filename !== item.filename)
+      saveHistory(history)
+      return {
+        folderItems: s.folderItems.filter((f) => f.filename !== item.filename),
+        history,
+        detailItem: s.detailItem?.filename === item.filename ? null : s.detailItem,
+      }
+    })
   },
 
   removeSource: (index) => set((s) => ({ sources: s.sources.filter((_, i) => i !== index) })),
