@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { classifyLora, selectableLoras } from '../lib/lora'
 import { IMAGE_RECOMMENDED } from '../lib/presets'
+import { appendHint, REFINE_HINTS } from '../lib/refine-hints'
 import { imageRewriterSupports } from '../lib/rewriter'
 import { ASPECT_OPTIONS, IMAGE_MP_OPTIONS, computeResolution, type AspectRatio } from '../lib/resolution'
 import type { ImageModel } from '../lib/types'
@@ -147,11 +148,24 @@ export function ImageStudio() {
               </p>
             )}
 
+            <div className="flex flex-wrap gap-1">
+              {REFINE_HINTS.map((h) => (
+                <button
+                  key={h.label}
+                  type="button"
+                  onClick={() => setRefineText((t) => appendHint(t, h.phrase))}
+                  className="rounded-full border border-cream-200 bg-white px-2 py-0.5 text-[11px] text-ink-600 hover:border-accent-400 hover:text-accent-600"
+                  title={h.phrase}
+                >
+                  + {h.label}
+                </button>
+              ))}
+            </div>
             <div className="flex items-start gap-2">
               <textarea
                 value={refineText}
                 onChange={(e) => setRefineText(e.target.value)}
-                placeholder="日本語で修正指示(例: 背景を夕焼けに、水しぶきを大きく、顔をアップに)"
+                placeholder="日本語で修正指示(上の軸をタップで追加、自由入力も可)"
                 className="h-14 flex-1 resize-y rounded-lg border border-cream-200 bg-white p-2 text-xs outline-none focus:border-accent-400"
               />
               <button
