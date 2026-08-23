@@ -122,12 +122,14 @@ export async function imageRewriterInstalled(model: ImageModel): Promise<boolean
 // ひらがな/カタカナ/漢字/ハングル。引用された表示文字以外への混入を弾く
 const CJK_RE = /[぀-ヿ㐀-鿿가-힯]/
 
-/** 残った日本語/中国語/韓国語の文字を除去し、余分な空白を詰める(最終手段) */
+/** 残った日本語/中国語/韓国語(記号・全角含む)を除去し、除去跡の空カンマ・空白を整える(最終手段) */
 function stripCjk(text: string): string {
   return text
-    .replace(/[぀-ヿ㐀-鿿가-힯＀-￯]/g, '')
+    .replace(/[　-〿぀-ヿ㐀-鿿가-힯＀-￯]/g, '') // かな/漢字/ハングル/CJK記号/全角
+    .replace(/,\s*(?=[,.;:])/g, '') // 連続/孤立カンマの整理
     .replace(/\s{2,}/g, ' ')
     .replace(/\s+([,.;:])/g, '$1')
+    .replace(/^[\s,]+|[\s,]+$/g, '')
     .trim()
 }
 
@@ -261,9 +263,22 @@ export async function refineImageViaOllama(current: string, instruction: string,
     `Revision request (may be written in Japanese): ${inst}\n\n` +
     `Rewrite the existing prompt into ONE improved single-paragraph English prompt that applies the revision while keeping everything else faithful. ` +
     `Output English only — no Japanese, Chinese, or Korean characters. Output only the final prompt.`
-  const out = await callImageRewriter(m, prompt)
-  // 語数許容・CJK除去・段落必須(通常の強化と同じ最終処理)
-  return finalizeImageRewrite(out, `${cur} ${inst}`, model)
+  let out = await callImageRewriter(m, prompt)
+  // CJK混入・形式崩れなら、英語強制でもう一度だけ再生成(除去より品質が良い)
+  let needsRetry = false
+  try {
+    validateImageRewrite(out, '', model)
+  } catch {
+    needsRetry = true
+  }
+  if (needsRetry) {
+    out = await callImageRewriter(
+      m,
+      `${prompt}\n\n(Write ONE detailed single-paragraph prompt in English ONLY. Absolutely no Japanese, Chinese, or Korean characters anywhere.)`,
+    )
+  }
+  // 視認テキスト許容は無し('')=残ったCJKは必ず除去。語数は許容・段落は必須
+  return finalizeImageRewrite(out, '', model)
 }
 
 /** 英語プロンプトを、ユーザーがレビューするための日本語に翻訳する(表示専用・実プロンプトは変えない) */
