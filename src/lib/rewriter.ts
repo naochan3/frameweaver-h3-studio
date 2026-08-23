@@ -301,15 +301,14 @@ export async function translatePromptToJa(text: string): Promise<string> {
   return (json.response ?? '').trim()
 }
 
-/** 一言 → H3本番プロンプト。Ollamaで生成(system は Modelfile に焼込済み) */
-export async function rewriteViaOllama(userText: string, mode: GenerationMode, lengthSec: number): Promise<string> {
+async function callVideoRewriter(prompt: string): Promise<string> {
   const res = await fetch(`${OLLAMA_URL}/generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     signal: AbortSignal.timeout(CLIENT_TIMEOUT_MS),
     body: JSON.stringify({
       model: OLLAMA_MODEL,
-      prompt: buildUserPrompt(userText, mode, lengthSec),
+      prompt,
       stream: false,
       // 温度は忠実性優先で0.5(0.7だと稀に入力を無視して別シーンを生成した)
       options: { temperature: 0.5, top_k: 64, top_p: 0.95, num_predict: 900 },
@@ -319,5 +318,46 @@ export async function rewriteViaOllama(userText: string, mode: GenerationMode, l
   const json = (await res.json()) as { response?: string }
   const out = (json.response ?? '').trim()
   if (!out) throw new Error('プロンプト強化の出力が空でした')
+  return out
+}
+
+/** 一言 → H3本番プロンプト。Ollamaで生成(system は Modelfile に焼込済み) */
+export async function rewriteViaOllama(userText: string, mode: GenerationMode, lengthSec: number): Promise<string> {
+  const out = await callVideoRewriter(buildUserPrompt(userText, mode, lengthSec))
   return validateVideoRewrite(out, lengthSec, mode)
+}
+
+/** 現在のH3プロンプトに日本語の抽象指示を反映する(3ブロック形式は厳守、セリフは原語保持)。 */
+export async function refineVideoViaOllama(
+  current: string,
+  instruction: string,
+  mode: GenerationMode,
+  lengthSec: number,
+): Promise<string> {
+  const cur = current.trim()
+  const inst = instruction.trim()
+  if (!cur) throw new Error('先にプロンプトを用意してください')
+  if (!inst) throw new Error('修正の指示を入力してください')
+  const task = TASK_NAME[mode] ?? 'T2AV'
+  const alignNote =
+    mode === 'text'
+      ? ''
+      : ' Keep the reference-frame alignment line at the very top, followed by one blank line before the three fields, unchanged in format.'
+  const base =
+    `Existing MiniMax-H3 prompt (${task}, ${lengthSec.toFixed(2)} seconds):\n${cur}\n\n` +
+    `Revision request (may be written in Japanese): ${inst}\n\n` +
+    `Rewrite it into a revised MiniMax-H3 prompt that applies the revision while keeping everything else faithful. ` +
+    `Keep the EXACT same format: the three fields integrated_multimodal_description / overall_soundscape / non_diegetic_music as exactly three lines with no blank lines between them.${alignNote} ` +
+    `Preserve any user dialogue, lyrics, or on-screen text in its original language exactly. Output only the prompt.`
+
+  const out = await callVideoRewriter(base)
+  try {
+    return validateVideoRewrite(out, lengthSec, mode)
+  } catch {
+    // 形式が崩れたら念押しでもう一度だけ
+    const retry = await callVideoRewriter(
+      `${base}\n\n(Output exactly the three-field format with no blank lines between fields. Output only the prompt.)`,
+    )
+    return validateVideoRewrite(retry, lengthSec, mode)
+  }
 }

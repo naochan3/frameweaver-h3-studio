@@ -9,6 +9,7 @@ import { randomSeed } from '../lib/seed'
 import {
   imageRewriterInstalled,
   refineImageViaOllama,
+  refineVideoViaOllama,
   rewriteImageViaOllama,
   rewriteViaOllama,
   rewriterInstalled,
@@ -108,6 +109,14 @@ interface GenerationState {
   rewritePrompt: () => Promise<void>
   /** リライト結果を取り消して元のプロンプトに戻す */
   undoRewrite: () => void
+  /** 日本語の抽象指示で動画プロンプトを改善(3ブロック形式は厳守) */
+  videoRefining: boolean
+  refineVideoPrompt: (instruction: string) => Promise<void>
+  /** 動画プロンプトの日本語訳(レビュー表示専用) */
+  videoPromptJa: string | null
+  videoTranslating: boolean
+  translateVideoPrompt: () => Promise<void>
+  clearVideoPromptJa: () => void
   /** 画像プロンプト強化(Krea2/Z-Image)が導入済みか */
   imageRewriterAvailable: boolean
   imageRewriting: boolean
@@ -251,6 +260,9 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
   rewriterAvailable: false,
   rewriting: false,
   rewriteUndo: null,
+  videoRefining: false,
+  videoPromptJa: null,
+  videoTranslating: false,
   imageRewriterAvailable: false,
   imageRewriting: false,
   imageRewriteUndo: null,
@@ -293,8 +305,51 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
   },
 
   undoRewrite: () => {
-    set((s) => (s.rewriteUndo === null ? s : { params: { ...s.params, prompt: s.rewriteUndo }, rewriteUndo: null }))
+    set((s) =>
+      s.rewriteUndo === null
+        ? s
+        : { params: { ...s.params, prompt: s.rewriteUndo }, rewriteUndo: null, videoPromptJa: null },
+    )
   },
+
+  refineVideoPrompt: async (instruction) => {
+    const { params, videoRefining } = get()
+    if (videoRefining) return
+    if (!params.prompt.trim()) {
+      set({ error: '先にプロンプトを用意してください' })
+      return
+    }
+    if (!instruction.trim()) {
+      set({ error: '日本語で修正の指示を入力してください' })
+      return
+    }
+    set({ videoRefining: true, error: null })
+    try {
+      const out = await refineVideoViaOllama(params.prompt, instruction, params.mode, params.lengthSec)
+      set((s) => ({
+        videoRefining: false,
+        rewriteUndo: s.params.prompt,
+        params: { ...s.params, prompt: out },
+        videoPromptJa: null,
+      }))
+    } catch (e) {
+      set({ videoRefining: false, error: e instanceof Error ? e.message : String(e) })
+    }
+  },
+
+  translateVideoPrompt: async () => {
+    const { params, videoTranslating } = get()
+    if (videoTranslating || !params.prompt.trim()) return
+    set({ videoTranslating: true, error: null })
+    try {
+      const ja = await translatePromptToJa(params.prompt)
+      set({ videoTranslating: false, videoPromptJa: ja })
+    } catch (e) {
+      set({ videoTranslating: false, error: e instanceof Error ? e.message : String(e) })
+    }
+  },
+
+  clearVideoPromptJa: () => set({ videoPromptJa: null }),
 
   rewriteImagePrompt: async () => {
     const { imageParams, imageRewriting } = get()

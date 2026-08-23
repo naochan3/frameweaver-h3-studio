@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { rewriterSupportsMode } from '../lib/rewriter'
 import { useGenerationStore } from '../store/generation'
 
@@ -18,6 +19,13 @@ export function ScenePanel() {
   const rewriteUndo = useGenerationStore((s) => s.rewriteUndo)
   const rewritePrompt = useGenerationStore((s) => s.rewritePrompt)
   const undoRewrite = useGenerationStore((s) => s.undoRewrite)
+  const videoRefining = useGenerationStore((s) => s.videoRefining)
+  const refineVideoPrompt = useGenerationStore((s) => s.refineVideoPrompt)
+  const videoPromptJa = useGenerationStore((s) => s.videoPromptJa)
+  const videoTranslating = useGenerationStore((s) => s.videoTranslating)
+  const translateVideoPrompt = useGenerationStore((s) => s.translateVideoPrompt)
+  const clearVideoPromptJa = useGenerationStore((s) => s.clearVideoPromptJa)
+  const [refineText, setRefineText] = useState('')
 
   const canRewrite = rewriterAvailable && rewriterSupportsMode(mode)
 
@@ -65,6 +73,52 @@ export function ScenePanel() {
         )}
         <p className="text-right text-xs text-ink-400">{prompt.length}文字</p>
       </div>
+
+      {/* 日本語でレビュー & 修正(実プロンプトは英語のまま。セリフは原語保持) */}
+      {canRewrite && prompt.trim() && (
+        <div className="mt-3 space-y-2 rounded-xl border border-cream-200 bg-cream-50 p-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-ink-600">日本語で確認・修正</span>
+            <button
+              type="button"
+              onClick={() => (videoPromptJa === null ? void translateVideoPrompt() : clearVideoPromptJa())}
+              disabled={videoTranslating}
+              className="rounded-lg border border-cream-200 bg-white px-2.5 py-1 text-xs font-semibold text-ink-600 hover:bg-cream-100 disabled:opacity-50"
+            >
+              {videoTranslating ? '訳しています…' : videoPromptJa === null ? '日本語で内容を見る' : '日本語表示を閉じる'}
+            </button>
+          </div>
+
+          {videoPromptJa !== null && (
+            <p className="whitespace-pre-wrap rounded-lg border border-cream-200 bg-white p-2 text-xs leading-relaxed text-ink-700">
+              {videoPromptJa || '(訳が空でした)'}
+            </p>
+          )}
+
+          <div className="flex items-start gap-2">
+            <textarea
+              value={refineText}
+              onChange={(e) => setRefineText(e.target.value)}
+              placeholder="日本語で修正指示(例: カメラを顔に寄せて、花火を派手に、BGMを明るく)"
+              className="h-14 flex-1 resize-y rounded-lg border border-cream-200 bg-white p-2 text-xs outline-none focus:border-accent-400"
+            />
+            <button
+              type="button"
+              onClick={async () => {
+                await refineVideoPrompt(refineText)
+                setRefineText('')
+              }}
+              disabled={videoRefining || !refineText.trim()}
+              className="shrink-0 rounded-lg bg-accent-500 px-4 py-2 text-xs font-bold text-white hover:bg-accent-600 disabled:opacity-50"
+            >
+              {videoRefining ? '反映中…' : '修正を反映'}
+            </button>
+          </div>
+          <p className="text-[11px] text-ink-400">
+            指示は日本語でOK。実プロンプトは英語のまま、3ブロック形式・セリフは保持したまま改善します(「元に戻す」で1つ前へ)。
+          </p>
+        </div>
+      )}
     </section>
   )
 }
