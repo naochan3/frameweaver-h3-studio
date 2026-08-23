@@ -1,10 +1,22 @@
+import { useState } from 'react'
+import { getTheme, setTheme, type Theme } from '../lib/theme'
 import { client, useGenerationStore } from '../store/generation'
 
 function formatGb(bytes: number): string {
   return (bytes / 1024 ** 3).toFixed(1)
 }
 
+const THEME_LABEL: Record<Theme, string> = { system: '自動', light: '淡色', dark: '暗色' }
+const NEXT_THEME: Record<Theme, Theme> = { system: 'light', light: 'dark', dark: 'system' }
+
 export function Header() {
+  const [theme, setThemeState] = useState<Theme>(getTheme())
+  const cycleTheme = () => {
+    const next = NEXT_THEME[theme]
+    setTheme(next)
+    setThemeState(next)
+  }
+
   const connected = useGenerationStore((s) => s.connected)
   const vram = useGenerationStore((s) => s.vram)
   const queueRemaining = useGenerationStore((s) => s.queueRemaining)
@@ -17,7 +29,7 @@ export function Header() {
   const vramPct = vram && vram.total > 0 ? Math.min(100, (vramUsed / vram.total) * 100) : 0
 
   return (
-    <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-cream-200 bg-white px-3 py-2 sm:gap-4 sm:px-5 sm:py-3">
+    <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-cream-200 bg-surface px-3 py-2 sm:gap-4 sm:px-5 sm:py-3">
       <div className="flex items-center gap-2">
         <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-500 font-bold text-white sm:h-8 sm:w-8">F</span>
         <h1 className="text-base font-bold tracking-tight sm:text-lg">FrameWeaver H3 Studio</h1>
@@ -60,6 +72,13 @@ export function Header() {
           title="生成物の保存フォルダをエクスプローラーで開く(PCのみ)"
         >
           出力フォルダ
+        </button>
+        <button
+          onClick={cycleTheme}
+          className="rounded-lg border border-cream-200 px-2.5 py-1.5 text-xs font-semibold text-ink-600 hover:bg-cream-100"
+          title="表示テーマを切替(自動→淡色→暗色)"
+        >
+          {THEME_LABEL[theme]}
         </button>
         <button
           onClick={() => setGuideOpen(true)}

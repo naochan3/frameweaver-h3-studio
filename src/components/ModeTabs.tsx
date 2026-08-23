@@ -14,7 +14,7 @@ export function ModeTabs() {
   const setMode = useGenerationStore((s) => s.setMode)
 
   return (
-    <nav className="flex gap-1 overflow-x-auto rounded-2xl bg-white p-1.5 shadow-sm sm:p-2">
+    <nav className="flex gap-1 overflow-x-auto rounded-2xl bg-surface p-1.5 shadow-sm sm:p-2">
       {MODES.map((m) => {
         const active = m.mode === mode
         return (

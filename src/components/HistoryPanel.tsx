@@ -37,7 +37,7 @@ export function HistoryPanel() {
   }, [connected]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <section className="rounded-2xl bg-white p-5 shadow-sm">
+    <section className="rounded-2xl bg-surface p-5 shadow-sm">
       <div className="mb-3 flex items-baseline justify-between">
         <div>
           <p className="text-[10px] font-bold tracking-[0.2em] text-accent-500">RECENT</p>
@@ -68,7 +68,7 @@ export function HistoryPanel() {
               key={t.key}
               onClick={() => setHistoryTab(t.key)}
               className={`flex flex-1 flex-col items-center rounded-lg px-2 py-1.5 transition-colors ${
-                active ? 'bg-white shadow-sm' : 'text-ink-600 hover:bg-white/50'
+                active ? 'bg-surface shadow-sm' : 'text-ink-600 hover:bg-surface/50'
               }`}
             >
               <span className={`text-xs font-bold ${active ? 'text-accent-600' : 'text-ink-600'}`}>{t.label}</span>

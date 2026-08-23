@@ -69,7 +69,7 @@ export function HistoryDetail() {
     <>
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={closeDetail}>
       <div
-        className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl md:flex-row"
+        className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-surface shadow-2xl md:flex-row"
         onClick={(e) => e.stopPropagation()}
       >
         {/* メディア(モバイルは高さを抑えて詳細も見えるように) */}
@@ -181,7 +181,7 @@ export function HistoryDetail() {
             {item.kind === 'image' && (
               <button
                 onClick={() => void sendImageToSource(item.videoUrl)}
-                className="rounded-lg bg-ink-900 px-4 py-2 text-sm font-bold text-white hover:bg-ink-600"
+                className="rounded-lg bg-onsurface px-4 py-2 text-sm font-bold text-white hover:opacity-90"
               >
                 動画の素材にする →
               </button>
@@ -235,7 +235,7 @@ export function HistoryDetail() {
         />
         <button
           onClick={() => setZoomed(false)}
-          className="absolute right-4 top-4 rounded-lg bg-white/90 px-3 py-1.5 text-sm font-semibold text-ink-900 hover:bg-white"
+          className="absolute right-4 top-4 rounded-lg bg-surface/90 px-3 py-1.5 text-sm font-semibold text-ink-900 hover:bg-surface"
         >
           閉じる
         </button>

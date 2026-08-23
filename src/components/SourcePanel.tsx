@@ -36,7 +36,7 @@ export function SourcePanel() {
       : `${SLOT_LABEL[mode]?.join('と') ?? '画像'}を追加してください。`
 
   return (
-    <section className="rounded-2xl bg-white p-5 shadow-sm">
+    <section className="rounded-2xl bg-surface p-5 shadow-sm">
       <div className="mb-3 flex items-baseline justify-between">
         <div>
           <p className="text-[10px] font-bold tracking-[0.2em] text-accent-500">SOURCE</p>

@@ -31,7 +31,7 @@ export function ScenePanel() {
   const canRewrite = rewriterAvailable && rewriterSupportsMode(mode)
 
   return (
-    <section className="rounded-2xl bg-white p-5 shadow-sm">
+    <section className="rounded-2xl bg-surface p-5 shadow-sm">
       <div className="mb-3 flex items-baseline justify-between">
         <div>
           <p className="text-[10px] font-bold tracking-[0.2em] text-accent-500">SCENE</p>
@@ -52,7 +52,7 @@ export function ScenePanel() {
               type="button"
               onClick={() => void rewritePrompt()}
               disabled={rewriting || !prompt.trim()}
-              className="rounded-lg border border-accent-300 bg-white px-3 py-1.5 text-xs font-bold text-accent-600 hover:bg-accent-50 disabled:opacity-50"
+              className="rounded-lg border border-accent-300 bg-surface px-3 py-1.5 text-xs font-bold text-accent-600 hover:bg-accent-50 disabled:opacity-50"
               title="一言(やりたいこと)を、映像+音響+BGMまで書かれた本番プロンプトに自動変換します"
             >
               {rewriting ? '強化中…(初回はモデル読込で数分)' : 'プロンプト自動強化'}
@@ -84,14 +84,14 @@ export function ScenePanel() {
               type="button"
               onClick={() => (videoPromptJa === null ? void translateVideoPrompt() : clearVideoPromptJa())}
               disabled={videoTranslating}
-              className="rounded-lg border border-cream-200 bg-white px-2.5 py-1 text-xs font-semibold text-ink-600 hover:bg-cream-100 disabled:opacity-50"
+              className="rounded-lg border border-cream-200 bg-surface px-2.5 py-1 text-xs font-semibold text-ink-600 hover:bg-cream-100 disabled:opacity-50"
             >
               {videoTranslating ? '訳しています…' : videoPromptJa === null ? '日本語で内容を見る' : '日本語表示を閉じる'}
             </button>
           </div>
 
           {videoPromptJa !== null && (
-            <p className="whitespace-pre-wrap rounded-lg border border-cream-200 bg-white p-2 text-xs leading-relaxed text-ink-700">
+            <p className="whitespace-pre-wrap rounded-lg border border-cream-200 bg-surface p-2 text-xs leading-relaxed text-ink-700">
               {videoPromptJa || '(訳が空でした)'}
             </p>
           )}
@@ -105,7 +105,7 @@ export function ScenePanel() {
                     key={h.label}
                     type="button"
                     onClick={() => setRefineText((t) => appendHint(t, h.phrase))}
-                    className="rounded-full border border-cream-200 bg-white px-2 py-0.5 text-[11px] text-ink-600 hover:border-accent-400 hover:text-accent-600"
+                    className="rounded-full border border-cream-200 bg-surface px-2 py-0.5 text-[11px] text-ink-600 hover:border-accent-400 hover:text-accent-600"
                     title={h.phrase}
                   >
                     {h.label}
@@ -119,7 +119,7 @@ export function ScenePanel() {
               value={refineText}
               onChange={(e) => setRefineText(e.target.value)}
               placeholder="日本語で修正指示(上の軸をタップで追加、自由入力も可)"
-              className="h-14 flex-1 resize-y rounded-lg border border-cream-200 bg-white p-2 text-xs outline-none focus:border-accent-400"
+              className="h-14 flex-1 resize-y rounded-lg border border-cream-200 bg-surface p-2 text-xs outline-none focus:border-accent-400"
             />
             <button
               type="button"
