@@ -142,7 +142,7 @@ function fitModel(snapshot: NodeCapabilitySnapshot, model: ModelCatalogEntry): M
   if (missingFiles.length > 0) reasons.push('missing-model-files')
   if (!primary || primary.vramTotal < model.minVramBytes) reasons.push('insufficient-vram')
 
-  if (reasons.length > 0) return { model, status: 'unavailable', reasons, missingFiles }
+  if (!primary || reasons.length > 0) return { model, status: 'unavailable', reasons, missingFiles }
 
   reasons.push('installed')
   if (snapshot.status === 'stale') return { model, status: 'warning', reasons: [...reasons, 'stale-capability'], missingFiles }

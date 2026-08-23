@@ -1,4 +1,6 @@
 import type { LoraMetaMap, WorkflowJson } from './types'
+import { collectNodeCapability } from './capability-collector'
+import type { NodeCapabilitySnapshot } from './model-capability'
 
 export interface ProgressEvent {
   type: 'status' | 'progress' | 'executing' | 'executed' | 'error' | 'preview'
@@ -312,5 +314,9 @@ export class ComfyClient {
     } catch {
       return null
     }
+  }
+
+  async capabilities(): Promise<NodeCapabilitySnapshot> {
+    return collectNodeCapability(this.baseUrl)
   }
 }
