@@ -261,8 +261,8 @@ export async function refineImageViaOllama(current: string, instruction: string,
   const prompt =
     `Existing image prompt:\n"""${cur}"""\n\n` +
     `Revision request (may be written in Japanese): ${inst}\n\n` +
-    `Rewrite the existing prompt into ONE improved single-paragraph English prompt that applies the revision while keeping everything else faithful. ` +
-    `Output English only — no Japanese, Chinese, or Korean characters. Output only the final prompt.`
+    `Apply the revision to the existing prompt. IMPORTANT: change ONLY what the revision explicitly asks; keep ALL other concrete details — the subject identity, setting, background, lighting, camera, lens, composition, and mood — exactly the same as the original. ` +
+    `Output ONE single-paragraph English prompt — English only, no Japanese, Chinese, or Korean characters. Output only the final prompt.`
   let out = await callImageRewriter(m, prompt)
   // CJK混入・形式崩れなら、英語強制でもう一度だけ再生成(除去より品質が良い)
   let needsRetry = false
@@ -346,7 +346,7 @@ export async function refineVideoViaOllama(
   const base =
     `Existing MiniMax-H3 prompt (${task}, ${lengthSec.toFixed(2)} seconds):\n${cur}\n\n` +
     `Revision request (may be written in Japanese): ${inst}\n\n` +
-    `Rewrite it into a revised MiniMax-H3 prompt that applies the revision while keeping everything else faithful. ` +
+    `Apply the revision to the existing prompt. IMPORTANT: change ONLY what the revision explicitly asks; keep ALL other concrete details — subjects, setting, actions, camera, lighting, mood, and sound — exactly the same as the original. ` +
     `Keep the EXACT same format: the three fields integrated_multimodal_description / overall_soundscape / non_diegetic_music as exactly three lines with no blank lines between them.${alignNote} ` +
     `Preserve any user dialogue, lyrics, or on-screen text in its original language exactly. Output only the prompt.`
 
