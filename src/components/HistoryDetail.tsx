@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { copyText } from '../lib/clipboard'
 import { formatDuration } from '../lib/eta'
 import { translatePromptToJa } from '../lib/rewriter'
 import { useGenerationStore } from '../store/generation'
@@ -38,6 +39,7 @@ export function HistoryDetail() {
   const [jaText, setJaText] = useState<string | null>(null)
   const [jaForFile, setJaForFile] = useState<string | null>(null)
   const [translating, setTranslating] = useState(false)
+  const [copied, setCopied] = useState(false)
   useBodyScrollLock(item != null)
 
   if (!item) return null
@@ -123,10 +125,14 @@ export function HistoryDetail() {
                   </button>
                 )}
                 <button
-                  onClick={() => void navigator.clipboard?.writeText(item.prompt)}
+                  onClick={async () => {
+                    const ok = await copyText(item.prompt)
+                    setCopied(ok)
+                    setTimeout(() => setCopied(false), 1500)
+                  }}
                   className="rounded border border-cream-200 px-2 py-0.5 text-[11px] font-semibold text-ink-600 hover:bg-cream-100"
                 >
-                  コピー
+                  {copied ? 'コピーしました' : 'コピー'}
                 </button>
               </div>
             </div>

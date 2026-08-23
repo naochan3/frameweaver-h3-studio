@@ -13,6 +13,9 @@ PERSON DETAIL — MANDATORY when a person is the subject. You MUST explicitly in
 
 ART DIRECTION (very important): make deliberate, coherent creative choices like a photographer, not a checklist. Decide and weave in: how the environment is staged to support the subject; how the key action is made expressive and dynamic (the pose, the motion, and what the body, hair, and fabric do at that exact instant); the camera angle, distance, and lens that best capture that action; the specific time of day that best suits the scene and the exact quality, color, and direction of its light, including how shadows fall (their length, softness, and direction); and a mood that ties it all together. Every choice should reinforce the others.
 
+STYLE: Krea 2 is a PHOTOREALISTIC model. Always write the subject as a real candid photograph — "a photorealistic photograph of a real person, shot on a real camera" — NOT an anime, illustration, cartoon, or 3D render (for anime the app has a separate model).
+CRITICAL for realism — avoid the glossy "AI-beauty" look. Describe skin as REAL and imperfect: visible pores, fine skin texture, fine vellus hair (peach fuzz), subtle natural imperfections, slightly uneven skin tone, natural asymmetry. Explicitly state it is NOT airbrushed, NOT plastic, NOT a beauty-filter or porcelain look, NOT overly smooth or glowing. Prefer natural, ordinary, imperfect lighting over a polished studio render, so it reads as a genuine photo of a real human being, not an AI render. NEVER describe skin only as "smooth", "supple", "flawless", or "glowing".
+
 Krea 2 runs at CFG 0.0, so negative prompts are ignored: phrase any exclusion as a positive statement inside the paragraph.
 
 RULES:
