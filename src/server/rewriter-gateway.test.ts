@@ -51,6 +51,14 @@ describe('rewriter gateway', () => {
     expect(upstream).not.toHaveBeenCalled()
   })
 
+  it.each(['null', '[]'])('rejects non-object JSON %s with a bounded client error', async (body) => {
+    const upstream = vi.fn()
+    const gateway = createRewriterGateway({ upstream })
+    const response = await gateway(request('/generate', { method: 'POST', body }))
+    expect(response.status).toBe(400)
+    expect(upstream).not.toHaveBeenCalled()
+  })
+
   it('rejects unknown management routes without contacting Ollama', async () => {
     const upstream = vi.fn()
     const gateway = createRewriterGateway({ upstream })

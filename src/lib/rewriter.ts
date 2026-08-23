@@ -162,13 +162,19 @@ function finalizeImageRewrite(out: string, idea: string, model: ImageModel): str
 }
 
 function requestedVisibleText(input: string): Set<string> {
-  return new Set([...input.matchAll(/[「『]([^」』]+)[」』]/g)].map((match) => match[1]))
+  return new Set([
+    ...[...input.matchAll(/[「『]([^」』]+)[」』]/g)].map((match) => match[1]),
+    ...[...input.matchAll(/"([^"\r\n]+)"/g)].map((match) => match[1]),
+  ])
 }
 
 export function validateImageRewrite(output: string, input: string, model: ImageModel): string {
   const text = output.trim()
   if (!text || /\r?\n/.test(text)) throw new Error('プロンプト強化の出力形式が単一段落ではありません')
   const allowed = requestedVisibleText(input)
+  if ([...allowed].some((value) => !text.includes(`"${value}"`))) {
+    throw new Error('プロンプト強化に指定された表示文字が残っていません')
+  }
   const prose = text.replace(/"([^"]*)"/g, (quoted, value: string) => (allowed.has(value) ? '' : quoted))
   if (CJK_RE.test(prose)) throw new Error('プロンプト強化に英語以外の文字が残っています')
   const words = text.match(/[A-Za-z0-9]+(?:[-'][A-Za-z0-9]+)*/g)?.length ?? 0
@@ -199,9 +205,20 @@ export function validateVideoRewrite(output: string, durationSec: number, mode: 
   if (lines.length !== fields.length || fields.some((field, index) => !lines[index].startsWith(field) || !lines[index].slice(field.length).trim())) {
     throw new Error('プロンプト強化の出力形式が不正です')
   }
+  const shots = [...body.matchAll(/\[Shot (\d+)\]/g)].map((match) => Number(match[1]))
+  if (shots.length === 0 || shots.some((shot, index) => shot !== index + 1)) throw new Error('プロンプト強化のShot番号が不正です')
+  if (mode === 'first_last' || mode === 'last') {
+    const match = mode === 'first_last'
+      ? /Picture 2 \(from Shot (\d+)\)/.exec(text)
+      : /<Picture 1> \(from \[Shot (\d+)\]\)/.exec(text)
+    if (!match || Number(match[1]) !== shots.at(-1)) throw new Error('プロンプト強化の参照画像アラインメントが不正です')
+  }
+  let previousSeconds = -1
   for (const match of text.matchAll(/At\s+(\d{2}):(\d{2}\.\d{3})/g)) {
     const seconds = Number(match[1]) * 60 + Number(match[2])
     if (seconds >= durationSec) throw new Error('プロンプト強化のShot時刻が動画尺を超えています')
+    if (seconds <= previousSeconds) throw new Error('プロンプト強化のShot時刻順が不正です')
+    previousSeconds = seconds
   }
   return text
 }
