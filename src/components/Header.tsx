@@ -1,4 +1,4 @@
-import { client, useGenerationStore } from '../store/generation'
+import { useGenerationStore } from '../store/generation'
 import { ThemePicker } from './ThemePicker'
 
 function formatGb(bytes: number): string {
@@ -70,7 +70,6 @@ export function Header() {
         >
           使い方
         </button>
-        <span className="ml-auto hidden text-xs text-ink-400 lg:inline">{client.baseUrl}</span>
       </div>
     </header>
   )

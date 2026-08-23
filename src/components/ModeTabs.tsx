@@ -14,7 +14,7 @@ export function ModeTabs() {
   const setMode = useGenerationStore((s) => s.setMode)
 
   return (
-    <nav className="flex gap-1 overflow-x-auto rounded-2xl bg-white p-1.5 shadow-sm sm:p-2">
+    <nav className="scrollbar-none flex gap-1 overflow-x-auto rounded-2xl bg-white p-1.5 shadow-sm sm:p-2">
       {MODES.map((m) => {
         const active = m.mode === mode
         return (
@@ -26,7 +26,7 @@ export function ModeTabs() {
             }`}
           >
             <span className="text-sm font-bold">{m.label}</span>
-            <span className={`text-[10px] tracking-wider ${active ? 'text-orange-100' : 'text-ink-400'}`}>{m.sub}</span>
+            <span className={`text-[10px] tracking-wider ${active ? 'text-white/70' : 'text-ink-400'}`}>{m.sub}</span>
           </button>
         )
       })}

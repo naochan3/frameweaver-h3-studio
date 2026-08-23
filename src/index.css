@@ -59,6 +59,14 @@ body {
   color: var(--color-ink-900);
 }
 
+.scrollbar-none {
+  scrollbar-width: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
 /* 使い方ガイドのアニメーション */
 @keyframes guide-panel-in {
   from { opacity: 0; transform: translateY(16px) scale(0.98); }
