@@ -5,6 +5,15 @@ import { buildImageWorkflow } from '../lib/image-workflow'
 import { classifyLora } from '../lib/lora'
 import { imageRecommendedParams, videoRecommendedParams } from '../lib/presets'
 import { randomSeed } from '../lib/seed'
+import {
+  imageRewriterInstalled,
+  refineImageViaOllama,
+  refineVideoViaOllama,
+  rewriteImageViaOllama,
+  rewriteViaOllama,
+  rewriterInstalled,
+  translatePromptToJa,
+} from '../lib/rewriter'
 import { patchWorkflow } from '../lib/workflow-patcher'
 import type { GenerationMode, GenerationParams, ImageModel, ImageParams, LoraMetaMap } from '../lib/types'
 
@@ -82,6 +91,39 @@ interface GenerationState {
   /** 使い方ガイドの表示状態(初回訪問時は自動表示) */
   guideOpen: boolean
   loraCatalogOpen: boolean
+  /** プロンプト自動強化(H3リライタ)が導入済みか */
+  rewriterAvailable: boolean
+  /** リライト実行中 */
+  rewriting: boolean
+  /** リライト前のプロンプト(元に戻す用。null=戻す先なし) */
+  rewriteUndo: string | null
+  /** 一言 → H3本番プロンプトへ自動強化(動画タブ) */
+  rewritePrompt: () => Promise<void>
+  /** リライト結果を取り消して元のプロンプトに戻す */
+  undoRewrite: () => void
+  /** 日本語の抽象指示で動画プロンプトを改善(3ブロック形式は厳守) */
+  videoRefining: boolean
+  refineVideoPrompt: (instruction: string) => Promise<void>
+  /** 動画プロンプトの日本語訳(レビュー表示専用) */
+  videoPromptJa: string | null
+  videoTranslating: boolean
+  translateVideoPrompt: () => Promise<void>
+  clearVideoPromptJa: () => void
+  /** 画像プロンプト強化(Krea2/Z-Image)が導入済みか */
+  imageRewriterAvailable: boolean
+  imageRewriting: boolean
+  imageRewriteUndo: string | null
+  /** 一言 → 画像本番プロンプトへ自動強化(画像タブ) */
+  rewriteImagePrompt: () => Promise<void>
+  undoImageRewrite: () => void
+  /** 日本語の抽象指示で画像プロンプトを改善(実プロンプトは英語のまま) */
+  imageRefining: boolean
+  refineImagePrompt: (instruction: string) => Promise<void>
+  /** 実プロンプトの日本語訳(レビュー表示専用。null=未取得/非表示) */
+  imagePromptJa: string | null
+  imageTranslating: boolean
+  translateImagePrompt: () => Promise<void>
+  clearImagePromptJa: () => void
   /** シードを生成ごとにランダムにするか(動画/画像それぞれ) */
   videoSeedRandom: boolean
   imageSeedRandom: boolean
@@ -90,6 +132,7 @@ interface GenerationState {
   toggleImageSeedRandom: () => void
   setGuideOpen: (open: boolean) => void
   setLoraCatalogOpen: (open: boolean) => void
+  refreshLoraMeta: () => Promise<void>
   applyLoraFromCatalog: (metaKey: string) => void
   setAppTab: (tab: 'video' | 'image') => void
   setImageParams: (patch: Partial<ImageParams>) => void
@@ -111,6 +154,8 @@ interface GenerationState {
   closeDetail: () => void
   /** 履歴アイテムのプロンプト・設定を編集画面に読み込む */
   applyHistorySettings: (item: HistoryItem) => void
+  /** 生成物を削除(出力ファイル+履歴+一覧から除去) */
+  deleteOutput: (item: HistoryItem) => Promise<void>
   removeSource: (index: number) => void
   generate: () => Promise<void>
   stop: () => Promise<void>
@@ -221,6 +266,18 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
 
   guideOpen: localStorage.getItem('frameweaver-guide-seen') !== '1',
   loraCatalogOpen: false,
+  rewriterAvailable: false,
+  rewriting: false,
+  rewriteUndo: null,
+  videoRefining: false,
+  videoPromptJa: null,
+  videoTranslating: false,
+  imageRewriterAvailable: false,
+  imageRewriting: false,
+  imageRewriteUndo: null,
+  imageRefining: false,
+  imagePromptJa: null,
+  imageTranslating: false,
   videoSeedRandom: true,
   imageSeedRandom: true,
 
@@ -232,7 +289,156 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
     set({ guideOpen: open })
   },
 
-  setLoraCatalogOpen: (loraCatalogOpen) => set({ loraCatalogOpen }),
+  rewritePrompt: async () => {
+    const { params, rewriting } = get()
+    const text = params.prompt.trim()
+    const request = { prompt: params.prompt, mode: params.mode, lengthSec: params.lengthSec }
+    if (rewriting) return
+    if (!text) {
+      set({ error: '強化する一言(何を作りたいか)を先に入力してください' })
+      return
+    }
+    set({ rewriting: true, error: null })
+    try {
+      // 軽量Ollama(Q8 8.7GB)で生成。初回のみモデル常駐化で少し待つ程度
+      const out = await rewriteViaOllama(text, params.mode, params.lengthSec)
+      set((s) => ({
+        rewriting: false,
+        ...(s.params.prompt === request.prompt && s.params.mode === request.mode && s.params.lengthSec === request.lengthSec
+          ? { rewriteUndo: request.prompt, params: { ...s.params, prompt: out } }
+          : {}),
+      }))
+    } catch (e) {
+      set({ rewriting: false, error: e instanceof Error ? e.message : String(e) })
+    }
+  },
+
+  undoRewrite: () => {
+    set((s) =>
+      s.rewriteUndo === null
+        ? s
+        : { params: { ...s.params, prompt: s.rewriteUndo }, rewriteUndo: null, videoPromptJa: null },
+    )
+  },
+
+  refineVideoPrompt: async (instruction) => {
+    const { params, videoRefining } = get()
+    if (videoRefining) return
+    if (!params.prompt.trim()) {
+      set({ error: '先にプロンプトを用意してください' })
+      return
+    }
+    if (!instruction.trim()) {
+      set({ error: '日本語で修正の指示を入力してください' })
+      return
+    }
+    set({ videoRefining: true, error: null })
+    try {
+      const out = await refineVideoViaOllama(params.prompt, instruction, params.mode, params.lengthSec)
+      set((s) => ({
+        videoRefining: false,
+        rewriteUndo: s.params.prompt,
+        params: { ...s.params, prompt: out },
+        videoPromptJa: null,
+      }))
+    } catch (e) {
+      set({ videoRefining: false, error: e instanceof Error ? e.message : String(e) })
+    }
+  },
+
+  translateVideoPrompt: async () => {
+    const { params, videoTranslating } = get()
+    if (videoTranslating || !params.prompt.trim()) return
+    set({ videoTranslating: true, error: null })
+    try {
+      const ja = await translatePromptToJa(params.prompt)
+      set({ videoTranslating: false, videoPromptJa: ja })
+    } catch (e) {
+      set({ videoTranslating: false, error: e instanceof Error ? e.message : String(e) })
+    }
+  },
+
+  clearVideoPromptJa: () => set({ videoPromptJa: null }),
+
+  rewriteImagePrompt: async () => {
+    const { imageParams, imageRewriting } = get()
+    const text = imageParams.prompt.trim()
+    const request = { prompt: imageParams.prompt, model: imageParams.model }
+    if (imageRewriting) return
+    if (!text) {
+      set({ error: '強化する一言(何を描きたいか)を先に入力してください' })
+      return
+    }
+    set({ imageRewriting: true, error: null })
+    try {
+      const out = await rewriteImageViaOllama(text, imageParams.model)
+      set((s) => ({
+        imageRewriting: false,
+        ...(s.imageParams.prompt === request.prompt && s.imageParams.model === request.model
+          ? { imageRewriteUndo: request.prompt, imageParams: { ...s.imageParams, prompt: out } }
+          : {}),
+      }))
+    } catch (e) {
+      set({ imageRewriting: false, error: e instanceof Error ? e.message : String(e) })
+    }
+  },
+
+  undoImageRewrite: () => {
+    set((s) =>
+      s.imageRewriteUndo === null
+        ? s
+        : { imageParams: { ...s.imageParams, prompt: s.imageRewriteUndo }, imageRewriteUndo: null, imagePromptJa: null },
+    )
+  },
+
+  refineImagePrompt: async (instruction) => {
+    const { imageParams, imageRefining } = get()
+    if (imageRefining) return
+    if (!imageParams.prompt.trim()) {
+      set({ error: '先にプロンプトを用意してください' })
+      return
+    }
+    if (!instruction.trim()) {
+      set({ error: '日本語で修正の指示を入力してください' })
+      return
+    }
+    set({ imageRefining: true, error: null })
+    try {
+      const out = await refineImageViaOllama(imageParams.prompt, instruction, imageParams.model)
+      set((s) => ({
+        imageRefining: false,
+        imageRewriteUndo: s.imageParams.prompt,
+        imageParams: { ...s.imageParams, prompt: out },
+        imagePromptJa: null, // 内容が変わったので古い訳は破棄
+      }))
+    } catch (e) {
+      set({ imageRefining: false, error: e instanceof Error ? e.message : String(e) })
+    }
+  },
+
+  translateImagePrompt: async () => {
+    const { imageParams, imageTranslating } = get()
+    if (imageTranslating || !imageParams.prompt.trim()) return
+    set({ imageTranslating: true, error: null })
+    try {
+      const ja = await translatePromptToJa(imageParams.prompt)
+      set({ imageTranslating: false, imagePromptJa: ja })
+    } catch (e) {
+      set({ imageTranslating: false, error: e instanceof Error ? e.message : String(e) })
+    }
+  },
+
+  clearImagePromptJa: () => set({ imagePromptJa: null }),
+
+  setLoraCatalogOpen: (open) => {
+    set({ loraCatalogOpen: open })
+    if (open) void get().refreshLoraMeta()
+  },
+
+  refreshLoraMeta: async () => {
+    const [loraMeta, loraList] = await Promise.all([client.getLoraMeta(), client.getLoraList()])
+    set({ loraMeta, loraList })
+  },
 
   applyLoraFromCatalog: (metaKey) => {
     const comfyName = get().loraList.find((name) => name.replace(/\\/g, '/') === metaKey) ?? metaKey
@@ -252,14 +458,22 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
         },
       }
     })
+    const selectedModel = get().imageParams.model
+    void imageRewriterInstalled(selectedModel).then((ok) => {
+      if (get().imageParams.model === selectedModel) set({ imageRewriterAvailable: ok })
+    })
   },
 
   setAppTab: (tab) => set({ appTab: tab }),
 
   setImageParams: (patch) => set((s) => ({ imageParams: { ...s.imageParams, ...patch } })),
 
-  setImageModel: (model) =>
-    set((s) => ({ imageParams: { ...s.imageParams, ...imageRecommendedParams(model) } })),
+  setImageModel: (model) => {
+    set((s) => ({ imageParams: { ...s.imageParams, ...imageRecommendedParams(model) } }))
+    void imageRewriterInstalled(model).then((ok) => {
+      if (get().imageParams.model === model) set({ imageRewriterAvailable: ok })
+    })
+  },
 
   resetVideoRecommended: () =>
     set((s) => ({ params: { ...s.params, ...videoRecommendedParams() } })),
@@ -399,6 +613,22 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
     }
   },
 
+  deleteOutput: async (item) => {
+    const subdir = item.kind === 'video' ? 'video' : item.mode
+    const ok = await client.deleteOutput(subdir, item.filename)
+    if (!ok) {
+      set({ error: '削除に失敗しました(カスタムノードの再起動が必要な場合があります)' })
+      return
+    }
+    set((s) => {
+      const history = s.history.filter((h) => h.filename !== item.filename)
+      return {
+        history,
+        detailItem: s.detailItem?.filename === item.filename ? null : s.detailItem,
+      }
+    })
+  },
+
   removeSource: (index) => set((s) => ({ sources: s.sources.filter((_, i) => i !== index) })),
 
   generate: async () => {
@@ -514,6 +744,13 @@ client.onEvent((ev) => {
         void client.getLoraList().then((loraList) => useGenerationStore.setState({ loraList }))
         void client.getCheckpointList().then((checkpointList) => useGenerationStore.setState({ checkpointList }))
         void client.getLoraMeta().then((loraMeta) => useGenerationStore.setState({ loraMeta }))
+        void rewriterInstalled().then((ok) => useGenerationStore.setState({ rewriterAvailable: ok }))
+        const imageModel = useGenerationStore.getState().imageParams.model
+        void imageRewriterInstalled(imageModel).then((ok) => {
+          if (useGenerationStore.getState().imageParams.model === imageModel) {
+            useGenerationStore.setState({ imageRewriterAvailable: ok })
+          }
+        })
       }
       if (ev.message === 'disconnected') useGenerationStore.setState({ connected: false })
       if (ev.queueRemaining !== undefined) useGenerationStore.setState({ queueRemaining: ev.queueRemaining })

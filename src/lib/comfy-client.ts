@@ -147,6 +147,55 @@ export class ComfyClient {
     return json.subfolder ? `${json.subfolder}/${json.name}` : json.name
   }
 
+  /** 出力フォルダをエクスプローラーで開く(カスタムノード frameweaver_openfolder が必要) */
+  async openOutputFolder(subdir: string): Promise<boolean> {
+    try {
+      const res = await fetch(`${this.baseUrl}/frameweaver/open_output`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subdir }),
+      })
+      return res.ok
+    } catch {
+      return false
+    }
+  }
+
+  /** output/<subdir>(video/zimage/krea2)内のメディアファイル一覧を新しい順で取得。
+   * prompt はファイル埋め込みワークフローから復元したもの(旧版アドオンでは undefined) */
+  async listOutput(subdir: string): Promise<{ filename: string; mtime: number; prompt?: string | null }[]> {
+    try {
+      const res = await fetch(`${this.baseUrl}/frameweaver/list_output?subdir=${encodeURIComponent(subdir)}`)
+      if (!res.ok) return []
+      const json = (await res.json()) as { files?: { filename: string; mtime: number; prompt?: string | null }[] }
+      return json.files ?? []
+    } catch {
+      return []
+    }
+  }
+
+  /** 出力フォルダの生成物を1件削除(カスタムノード frameweaver_openfolder が必要) */
+  async deleteOutput(subdir: string, filename: string): Promise<boolean> {
+    try {
+      const res = await fetch(`${this.baseUrl}/frameweaver/delete_output`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subdir, filename }),
+      })
+      return res.ok
+    } catch {
+      return false
+    }
+  }
+
+  async freeMemory(): Promise<void> {
+    await fetch(`${this.baseUrl}/free`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ unload_models: true, free_memory: true }),
+    })
+  }
+
   /** 完了したジョブの動画出力(SaveVideoノードの出力)を取得 */
   async fetchOutputs(promptId: string): Promise<HistoryOutput[]> {
     const res = await fetch(`${this.baseUrl}/history/${promptId}`)
@@ -190,7 +239,45 @@ export class ComfyClient {
     }
   }
 
-  /** 選択可能なチェックポイント一覧を取得 */
+  /** 完了ジョブのテキスト出力(PreviewAny等の ui.text)を取得。無ければ null */
+  async fetchTextOutput(promptId: string): Promise<string | null> {
+    const res = await fetch(`${this.baseUrl}/history/${promptId}`)
+    if (!res.ok) return null
+    const json = (await res.json()) as Record<string, { outputs?: Record<string, { text?: string[] }> }>
+    const entry = json[promptId]
+    if (!entry?.outputs) return null
+    for (const nodeOutput of Object.values(entry.outputs)) {
+      const t = nodeOutput.text
+      if (Array.isArray(t) && typeof t[0] === 'string' && t[0].trim()) return t[0]
+    }
+    return null
+  }
+
+  /** Civitai由来のLoRA説明メタ(名前・トリガー・ジャンル等)を取得 */
+  async getLoraMeta(): Promise<LoraMetaMap> {
+    try {
+      const res = await fetch(`${this.baseUrl}/frameweaver/lora_meta`)
+      if (!res.ok) return {}
+      const json = (await res.json()) as { meta?: LoraMetaMap }
+      return json.meta ?? {}
+    } catch {
+      return {}
+    }
+  }
+
+  /** 選択可能なCLIP/テキストエンコーダのファイル名一覧を取得(リライタ導入判定用) */
+  async getClipList(): Promise<string[]> {
+    try {
+      const res = await fetch(`${this.baseUrl}/object_info/CLIPLoader`)
+      if (!res.ok) return []
+      const json = (await res.json()) as Record<string, { input?: { required?: { clip_name?: [string[]] } } }>
+      return json['CLIPLoader']?.input?.required?.clip_name?.[0] ?? []
+    } catch {
+      return []
+    }
+  }
+
+  /** 選択可能なチェックポイント(SDXL等)ファイル名一覧を取得 */
   async getCheckpointList(): Promise<string[]> {
     try {
       const res = await fetch(`${this.baseUrl}/object_info/CheckpointLoaderSimple`)
@@ -199,17 +286,6 @@ export class ComfyClient {
       return json['CheckpointLoaderSimple']?.input?.required?.ckpt_name?.[0] ?? []
     } catch {
       return []
-    }
-  }
-
-  /** FrameWeaver custom node が公開する公開カタログメタデータを取得 */
-  async getLoraMeta(): Promise<LoraMetaMap> {
-    try {
-      const res = await fetch(`${this.baseUrl}/frameweaver/lora_meta`)
-      if (!res.ok) return {}
-      return (await res.json()) as LoraMetaMap
-    } catch {
-      return {}
     }
   }
 

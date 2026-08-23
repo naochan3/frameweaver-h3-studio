@@ -81,6 +81,40 @@ async def list_output(request: web.Request) -> web.Response:
     return web.json_response({"ok": True, "subdir": subdir, "files": files})
 
 
+@PromptServer.instance.routes.post("/frameweaver/delete_output")
+async def delete_output(request: web.Request) -> web.Response:
+    """output/<subdir>/<filename> の生成物を1件削除する。
+    許可サブフォルダ内・単一ファイル名のみ(パス脱出・ディレクトリ削除は不可)。"""
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    subdir = str(data.get("subdir", "")).strip().strip("/\\")
+    filename = str(data.get("filename", "")).strip()
+
+    if subdir == "" or subdir not in ALLOWED_SUBDIRS:
+        return web.json_response({"ok": False, "error": "invalid subdir"}, status=400)
+    # ファイル名は単一のベース名のみ(区切り文字・親参照を拒否)
+    if not filename or "/" in filename or "\\" in filename or ".." in filename:
+        return web.json_response({"ok": False, "error": "invalid filename"}, status=400)
+    if not filename.lower().endswith(_MEDIA_EXTS):
+        return web.json_response({"ok": False, "error": "not a media file"}, status=400)
+
+    subroot = os.path.normpath(os.path.join(OUTPUT_ROOT, subdir))
+    target = os.path.normpath(os.path.join(subroot, filename))
+    # サブフォルダの外に出ていないか最終確認
+    if not target.startswith(subroot + os.sep):
+        return web.json_response({"ok": False, "error": "path escape"}, status=400)
+    if not os.path.isfile(target):
+        return web.json_response({"ok": False, "error": "not found"}, status=404)
+
+    try:
+        os.remove(target)
+    except OSError as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+    return web.json_response({"ok": True, "deleted": filename})
+
+
 @PromptServer.instance.routes.get("/frameweaver/lora_meta")
 async def lora_meta(request: web.Request) -> web.Response:
     """loras フォルダの frameweaver_lora_meta.json(Civitai由来のLoRA説明)を返す。"""
@@ -97,4 +131,4 @@ async def lora_meta(request: web.Request) -> web.Response:
 
 NODE_CLASS_MAPPINGS = {}
 NODE_DISPLAY_NAME_MAPPINGS = {}
-print("[FrameWeaver] APIs registered (/frameweaver/open_output, /frameweaver/list_output, /frameweaver/lora_meta)")
+print("[FrameWeaver] APIs registered (/frameweaver/open_output, /frameweaver/list_output, /frameweaver/lora_meta, /frameweaver/delete_output)")

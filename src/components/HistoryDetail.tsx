@@ -1,5 +1,7 @@
 import { useState } from 'react'
+import { copyText } from '../lib/clipboard'
 import { formatDuration } from '../lib/eta'
+import { translatePromptToJa } from '../lib/rewriter'
 import { useGenerationStore } from '../store/generation'
 import { useBodyScrollLock } from '../lib/useBodyScrollLock'
 
@@ -29,11 +31,39 @@ export function HistoryDetail() {
   const closeDetail = useGenerationStore((s) => s.closeDetail)
   const applyHistorySettings = useGenerationStore((s) => s.applyHistorySettings)
   const sendImageToSource = useGenerationStore((s) => s.sendImageToSource)
+  const deleteOutput = useGenerationStore((s) => s.deleteOutput)
   const [zoomed, setZoomed] = useState(false)
+  // 削除確認は対象ファイル名で保持(別アイテムを開くと自動的に確認解除になる)
+  const [confirmFor, setConfirmFor] = useState<string | null>(null)
+  // プロンプト和訳(対象ファイル名で保持=別アイテムを開くと自動で消える)
+  const [jaText, setJaText] = useState<string | null>(null)
+  const [jaForFile, setJaForFile] = useState<string | null>(null)
+  const [translating, setTranslating] = useState(false)
+  const [copied, setCopied] = useState(false)
   useBodyScrollLock(item != null)
 
   if (!item) return null
   const s = item.settings
+  const confirmDelete = confirmFor === item.filename
+  const showJa = jaForFile === item.filename && jaText !== null
+
+  const onTranslate = async () => {
+    if (showJa) {
+      setJaText(null)
+      setJaForFile(null)
+      return
+    }
+    setTranslating(true)
+    try {
+      const t = await translatePromptToJa(item.prompt)
+      setJaText(t || '(訳が空でした)')
+    } catch {
+      setJaText('和訳に失敗しました(Ollamaと翻訳モデルを確認してください)')
+    } finally {
+      setJaForFile(item.filename)
+      setTranslating(false)
+    }
+  }
 
   return (
     <>
@@ -84,16 +114,37 @@ export function HistoryDetail() {
           <div className="mb-3">
             <div className="mb-1 flex items-center justify-between">
               <span className="text-xs font-semibold text-ink-400">プロンプト</span>
-              <button
-                onClick={() => void navigator.clipboard?.writeText(item.prompt)}
-                className="rounded border border-cream-200 px-2 py-0.5 text-[11px] font-semibold text-ink-600 hover:bg-cream-100"
-              >
-                コピー
-              </button>
+              <div className="flex gap-1.5">
+                {item.prompt.trim() && (
+                  <button
+                    onClick={() => void onTranslate()}
+                    disabled={translating}
+                    className="rounded border border-cream-200 px-2 py-0.5 text-[11px] font-semibold text-ink-600 hover:bg-cream-100 disabled:opacity-50"
+                  >
+                    {translating ? '和訳中…' : showJa ? '和訳を閉じる' : '和訳'}
+                  </button>
+                )}
+                <button
+                  onClick={async () => {
+                    const ok = await copyText(item.prompt)
+                    setCopied(ok)
+                    setTimeout(() => setCopied(false), 1500)
+                  }}
+                  className="rounded border border-cream-200 px-2 py-0.5 text-[11px] font-semibold text-ink-600 hover:bg-cream-100"
+                >
+                  {copied ? 'コピーしました' : 'コピー'}
+                </button>
+              </div>
             </div>
             <p className="max-h-40 overflow-y-auto whitespace-pre-wrap rounded-lg border border-cream-200 bg-cream-50 p-3 text-sm leading-relaxed">
               {item.prompt}
             </p>
+            {showJa && (
+              <div className="mt-1.5 rounded-lg border border-accent-200 bg-orange-50/60 p-3">
+                <p className="mb-1 text-[10px] font-bold tracking-wider text-accent-500">和訳(レビュー用)</p>
+                <p className="max-h-40 overflow-y-auto whitespace-pre-wrap text-sm leading-relaxed text-ink-700">{jaText}</p>
+              </div>
+            )}
           </div>
 
           <div className="mb-4">
@@ -142,6 +193,30 @@ export function HistoryDetail() {
             >
               {item.kind === 'image' ? '画像を保存' : '動画を保存'}
             </a>
+            {confirmDelete ? (
+              <div className="ml-auto flex items-center gap-2">
+                <span className="text-xs font-semibold text-red-600">元に戻せません。削除しますか?</span>
+                <button
+                  onClick={() => void deleteOutput(item)}
+                  className="rounded-lg bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-700"
+                >
+                  削除する
+                </button>
+                <button
+                  onClick={() => setConfirmFor(null)}
+                  className="rounded-lg border border-cream-200 px-3 py-2 text-sm font-semibold text-ink-600 hover:bg-cream-100"
+                >
+                  やめる
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setConfirmFor(item.filename)}
+                className="ml-auto rounded-lg border border-red-200 px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50"
+              >
+                削除
+              </button>
+            )}
           </div>
         </div>
       </div>

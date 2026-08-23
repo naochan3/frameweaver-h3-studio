@@ -2,10 +2,15 @@
 REM ============================================================
 REM FrameWeaver H3 Studio 起動スクリプト
 REM  1) ComfyUI バックエンド (127.0.0.1:8188)
-REM  2) WebUI (http://localhost:5180)
-REM  3) ブラウザを開く
+REM  1) Ollama (プロンプト強化用LLM, 127.0.0.1:11434)
+REM  2) ComfyUI バックエンド (127.0.0.1:8188)
+REM  3) WebUI (http://localhost:5180)
+REM  4) ブラウザを開く
 REM すべて localhost バインドなのでファイアウォール許可は不要。
 REM ============================================================
+
+REM --- Ollama (未起動なら起動。プロンプト自動強化に使用) ---
+powershell -NoProfile -Command "$up=$false; try { $up=((Invoke-WebRequest 'http://127.0.0.1:11434/api/tags' -TimeoutSec 2 -UseBasicParsing).StatusCode -eq 200) } catch {}; if (-not $up) { Start-Process '%LOCALAPPDATA%\Programs\Ollama\ollama.exe' -ArgumentList 'serve' -WindowStyle Hidden }"
 
 REM --- ComfyUI バックエンド ---
 start "ComfyUI (port 8188)" powershell -NoProfile -ExecutionPolicy Bypass -File "C:\Users\ogosh\work\shirokuma-openclaw-ops\scripts\Start-ShirokumaComfyUI.ps1"
