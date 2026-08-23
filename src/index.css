@@ -4,12 +4,54 @@
   --color-cream-50: #faf7f2;
   --color-cream-100: #f4efe6;
   --color-cream-200: #e9e1d3;
+  --color-cream-300: #d8c9b7;
+  --color-accent-50: #fff7ed;
+  --color-accent-200: #fed7aa;
+  --color-accent-300: #fdba74;
   --color-accent-400: #f59e5b;
   --color-accent-500: #ef8236;
   --color-accent-600: #e06d1f;
   --color-ink-900: #2b2420;
+  --color-ink-700: #4b4038;
   --color-ink-600: #6b5f55;
+  --color-ink-500: #817468;
   --color-ink-400: #a39588;
+}
+
+html[data-theme='ocean'] {
+  --color-cream-50: #f5fafc;
+  --color-cream-100: #eaf4f7;
+  --color-cream-200: #d5e8ed;
+  --color-cream-300: #b8d4dc;
+  --color-accent-50: #ecfeff;
+  --color-accent-200: #a5f3fc;
+  --color-accent-300: #67e8f9;
+  --color-accent-400: #22d3ee;
+  --color-accent-500: #0891b2;
+  --color-accent-600: #0e7490;
+  --color-ink-400: #7b939d;
+  --color-ink-500: #5c7580;
+  --color-ink-600: #455f6b;
+  --color-ink-700: #304750;
+  --color-ink-900: #172b33;
+}
+
+html[data-theme='violet'] {
+  --color-cream-50: #faf7fc;
+  --color-cream-100: #f4edf8;
+  --color-cream-200: #e8dcf0;
+  --color-cream-300: #d4c0e2;
+  --color-accent-50: #faf5ff;
+  --color-accent-200: #e9d5ff;
+  --color-accent-300: #d8b4fe;
+  --color-accent-400: #c084fc;
+  --color-accent-500: #9333ea;
+  --color-accent-600: #7e22ce;
+  --color-ink-400: #9a8ba5;
+  --color-ink-500: #776685;
+  --color-ink-600: #62536f;
+  --color-ink-700: #493b55;
+  --color-ink-900: #2b2132;
 }
 
 body {

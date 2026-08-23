@@ -1,4 +1,5 @@
 import { client, useGenerationStore } from '../store/generation'
+import { ThemePicker } from './ThemePicker'
 
 function formatGb(bytes: number): string {
   return (bytes / 1024 ** 3).toFixed(1)
@@ -29,6 +30,8 @@ export function Header() {
         <span className="sm:hidden">{connected ? '接続済' : '未接続'}</span>
         {queueRemaining > 0 && <span className="ml-1 font-semibold text-accent-600">キュー {queueRemaining}</span>}
       </div>
+
+      <ThemePicker />
 
       {/* 操作系: モバイルでは折り返して2段目に並ぶ。横スクロールは発生させない */}
       <div className="flex w-full items-center gap-2 sm:ml-auto sm:w-auto sm:gap-3">
