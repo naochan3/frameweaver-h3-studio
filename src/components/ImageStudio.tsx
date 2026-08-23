@@ -5,7 +5,9 @@ import { appendHint, REFINE_HINT_GROUPS } from '../lib/refine-hints'
 import { imageRewriterSupports } from '../lib/rewriter'
 import { ASPECT_OPTIONS, IMAGE_MP_OPTIONS, computeResolution, type AspectRatio } from '../lib/resolution'
 import type { ImageModel } from '../lib/types'
+import { rankModels } from '../lib/model-capability'
 import { useGenerationStore } from '../store/generation'
+import { ModelFitBadge } from './ModelFitBadge'
 
 const IMAGE_MODELS: { key: ImageModel; label: string; desc: string }[] = [
   { key: 'zimage', label: 'Z-Image Turbo', desc: '導入済み・高速。アニメ〜実写まで万能' },
@@ -34,6 +36,7 @@ export function ImageStudio() {
   const status = useGenerationStore((s) => s.status)
   const error = useGenerationStore((s) => s.error)
   const imageRewriterAvailable = useGenerationStore((s) => s.imageRewriterAvailable)
+  const capability = useGenerationStore((s) => s.capability)
   const imageRewriting = useGenerationStore((s) => s.imageRewriting)
   const imageRewriteUndo = useGenerationStore((s) => s.imageRewriteUndo)
   const rewriteImagePrompt = useGenerationStore((s) => s.rewriteImagePrompt)
@@ -50,6 +53,7 @@ export function ImageStudio() {
   const ready = !busy && imageParams.prompt.trim().length > 0
   const isAnime = imageParams.model === 'anime'
   const canRewrite = imageRewriterAvailable && imageRewriterSupports(imageParams.model)
+  const modelFits = capability ? rankModels(capability, 'image') : []
 
   // 選択中LoRAの説明(Civitai由来)。ComfyUIはWindowsで "\" 区切り、メタキーは "/" なので正規化
   const metaOf = (name: string) => loraMeta[name.trim().replace(/\\/g, '/')]
@@ -211,6 +215,7 @@ export function ImageStudio() {
         <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
           {IMAGE_MODELS.map((m) => {
             const active = imageParams.model === m.key
+            const fit = modelFits.find((item) => item.model.id === m.key)
             return (
               <button
                 key={m.key}
@@ -219,7 +224,10 @@ export function ImageStudio() {
                   active ? 'border-accent-500 bg-orange-50' : 'border-cream-200 hover:border-accent-400'
                 }`}
               >
-                <span className={`text-sm font-bold ${active ? 'text-accent-600' : 'text-ink-900'}`}>{m.label}</span>
+                <span className="flex flex-wrap items-center justify-between gap-1">
+                  <span className={`text-sm font-bold ${active ? 'text-accent-600' : 'text-ink-900'}`}>{m.label}</span>
+                  {fit && <ModelFitBadge fit={fit} />}
+                </span>
                 <p className="mt-0.5 text-xs text-ink-600">{m.desc}</p>
               </button>
             )

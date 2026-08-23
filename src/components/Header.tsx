@@ -7,15 +7,19 @@ function formatGb(bytes: number): string {
 
 export function Header() {
   const connected = useGenerationStore((s) => s.connected)
+  const wsConnected = useGenerationStore((s) => s.wsConnected)
   const vram = useGenerationStore((s) => s.vram)
   const queueRemaining = useGenerationStore((s) => s.queueRemaining)
   const stop = useGenerationStore((s) => s.stop)
   const freeVram = useGenerationStore((s) => s.freeVram)
+  const refreshCapability = useGenerationStore((s) => s.refreshCapability)
   const openOutputFolder = useGenerationStore((s) => s.openOutputFolder)
   const setGuideOpen = useGenerationStore((s) => s.setGuideOpen)
 
   const vramUsed = vram ? vram.total - vram.free : 0
   const vramPct = vram && vram.total > 0 ? Math.min(100, (vramUsed / vram.total) * 100) : 0
+  const connectionLabel = !connected ? '未接続' : wsConnected ? '接続済み' : 'APIのみ'
+  const connectionDot = !connected ? 'bg-red-400' : wsConnected ? 'bg-green-500' : 'bg-amber-400'
 
   return (
     <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-cream-200 bg-white px-3 py-2 sm:gap-4 sm:px-5 sm:py-3">
@@ -25,9 +29,9 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-1.5 rounded-full bg-cream-100 px-2.5 py-1 text-xs text-ink-600">
-        <span className={`h-2 w-2 rounded-full ${connected ? 'bg-green-500' : 'bg-red-400'}`} />
-        <span className="hidden sm:inline">{connected ? 'ComfyUI 接続済み' : 'ComfyUI 未接続'}</span>
-        <span className="sm:hidden">{connected ? '接続済' : '未接続'}</span>
+        <span className={`h-2 w-2 rounded-full ${connectionDot}`} />
+        <span className="hidden sm:inline">ComfyUI {connectionLabel}</span>
+        <span className="sm:hidden">{connectionLabel}</span>
         {queueRemaining > 0 && <span className="ml-1 font-semibold text-accent-600">キュー {queueRemaining}</span>}
       </div>
 
@@ -43,6 +47,15 @@ export function Header() {
           <span className="text-xs tabular-nums text-ink-600">
             {vram ? `${formatGb(vramUsed)}/${formatGb(vram.total)}GB` : '--'}
           </span>
+          <button
+            type="button"
+            onClick={() => void refreshCapability()}
+            className="rounded px-1 text-ink-400 hover:bg-cream-100 hover:text-accent-600"
+            title="GPU能力とモデル在庫を再診断"
+            aria-label="GPU能力とモデル在庫を再診断"
+          >
+            ↻
+          </button>
         </div>
         <button
           onClick={() => void stop()}

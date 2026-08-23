@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { classifyLora, selectableLoras } from '../lib/lora'
 import { ASPECT_OPTIONS, VIDEO_MP_OPTIONS, computeResolution, type AspectRatio } from '../lib/resolution'
 import { imageSlots, useGenerationStore } from '../store/generation'
+import { rankModels } from '../lib/model-capability'
+import { ModelFitBadge } from './ModelFitBadge'
 
 export function RecipePanel() {
   const params = useGenerationStore((s) => s.params)
@@ -13,10 +15,12 @@ export function RecipePanel() {
   const resetVideoRecommended = useGenerationStore((s) => s.resetVideoRecommended)
   const seedRandom = useGenerationStore((s) => s.videoSeedRandom)
   const toggleSeedRandom = useGenerationStore((s) => s.toggleVideoSeedRandom)
+  const capability = useGenerationStore((s) => s.capability)
 
   const busy = status === 'queued' || status === 'running' || status === 'uploading'
   const [minImages] = imageSlots(params.mode)
   const ready = !busy && params.prompt.trim().length > 0 && sources.length >= minImages
+  const videoFit = capability ? rankModels(capability, 'video')[0] : null
 
   // アスペクト比×画質(MP)の2軸で解像度を決める(実測: 1.3MP超は12GBで非実用)
   const [aspect, setAspect] = useState<AspectRatio>('9:16')
@@ -37,7 +41,10 @@ export function RecipePanel() {
       <div className="mb-4 flex items-start justify-between">
         <div>
           <p className="text-[10px] font-bold tracking-[0.2em] text-accent-500">RECIPE</p>
-          <h2 className="text-lg font-bold">仕上がりを選ぶ</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-lg font-bold">仕上がりを選ぶ</h2>
+            {videoFit && <ModelFitBadge fit={videoFit} />}
+          </div>
           <p className="mt-0.5 text-xs text-ink-400">初期値は12GB VRAM向けのおすすめ設定です。</p>
         </div>
         <button

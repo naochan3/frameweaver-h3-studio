@@ -13,11 +13,16 @@ const fakeLocalStorage = {
 
 class FakeWebSocket {
   static readonly OPEN = 1
+  static latest: FakeWebSocket | null = null
   readyState = 0
   binaryType = ''
-  onmessage: unknown = null
-  onclose: unknown = null
-  onopen: unknown = null
+  onmessage: ((event: MessageEvent) => void) | null = null
+  onclose: (() => void) | null = null
+  onopen: (() => void) | null = null
+
+  constructor() {
+    FakeWebSocket.latest = this
+  }
 }
 
 let store: typeof import('./generation')
@@ -53,6 +58,17 @@ describe('プロンプト下書きの永続化(store配線)', () => {
   it('プロンプトを空にすると下書きキーごと削除される', () => {
     store.useGenerationStore.getState().setParams({ prompt: '' })
     expect(storageMap.has('frameweaver-draft-video-prompt')).toBe(false)
+  })
+})
+
+describe('ComfyUI接続状態の分離', () => {
+  it('REST能力とWebSocketイベント経路を別々に表示できる', () => {
+    store.useGenerationStore.setState({ connected: true, wsConnected: false })
+    FakeWebSocket.latest?.onopen?.()
+    expect(store.useGenerationStore.getState()).toMatchObject({ connected: true, wsConnected: true })
+
+    FakeWebSocket.latest?.onclose?.()
+    expect(store.useGenerationStore.getState()).toMatchObject({ connected: true, wsConnected: false })
   })
 })
 

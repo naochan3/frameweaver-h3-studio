@@ -333,6 +333,7 @@ start_studio.bat         Ollama→ComfyUI→WebUI をまとめて起動
 | 静的検査 | `npm run lint` | error 0 |
 | 本番ビルド | `npm run build` | `dist/`生成、exit 0 |
 | README画像 | `npm run docs:verify` | 参照2件とPNG寸法が一致 |
+| 実行環境smoke | `npm run smoke:runtime -- --base-url <URL>` | HTML・GPU・モデルAPIが全て成功 |
 | ComfyUI | `/comfy/system_stats` | HTTP 200、GPU情報あり |
 | Tailscale | 別端末からtailnet URL | HTML/JS/CSSがHTTP 200 |
 | スマホ | 390px相当で操作 | 横スクロールなし、入力と生成ボタン表示 |

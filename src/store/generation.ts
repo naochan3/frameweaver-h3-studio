@@ -62,7 +62,10 @@ export interface HistoryItem {
 export type GenerationStatus = 'idle' | 'uploading' | 'queued' | 'running' | 'done' | 'error'
 
 interface GenerationState {
+  /** ComfyUI REST APIが応答しているか */
   connected: boolean
+  /** 生成進捗・完了通知を受け取るWebSocketが接続中か */
+  wsConnected: boolean
   queueRemaining: number
   vram: { total: number; free: number } | null
   capability: NodeCapabilitySnapshot | null
@@ -211,6 +214,7 @@ export function imageSlots(mode: GenerationMode): [number, number] {
 
 export const useGenerationStore = create<GenerationState>((set, get) => ({
   connected: false,
+  wsConnected: false,
   queueRemaining: 0,
   vram: null,
   capability: null,
@@ -802,7 +806,7 @@ client.onEvent((ev) => {
   switch (ev.type) {
     case 'status':
       if (ev.message === 'connected') {
-        useGenerationStore.setState({ connected: true })
+        useGenerationStore.setState({ wsConnected: true })
         void useGenerationStore.getState().refreshCapability()
         void client.getLoraMeta().then((loraMeta) => useGenerationStore.setState({ loraMeta }))
         void rewriterInstalled().then((ok) => useGenerationStore.setState({ rewriterAvailable: ok }))
@@ -814,7 +818,7 @@ client.onEvent((ev) => {
         })
         void useGenerationStore.getState().reloadFolder()
       }
-      if (ev.message === 'disconnected') useGenerationStore.setState({ connected: false })
+      if (ev.message === 'disconnected') useGenerationStore.setState({ wsConnected: false })
       if (ev.queueRemaining !== undefined) useGenerationStore.setState({ queueRemaining: ev.queueRemaining })
       break
     case 'progress':

@@ -105,6 +105,19 @@ curl -fsS -H 'Accept: text/html' -o /dev/null \
 
 ## 5. 検証チェックリスト
 
+FrameWeaverを起動したノードは、ジョブを投入しない読み取り専用smokeで一括確認できます。
+
+```powershell
+npm run smoke:runtime -- --base-url https://<device>.<tailnet>.ts.net:10000
+```
+
+ComfyUIが8189以外の場合は、起動前にproxy先を上書きできます。
+
+```powershell
+$env:COMFY_TARGET = 'http://127.0.0.1:8188'
+npm run dev -- --host 127.0.0.1
+```
+
 - [ ] ホストPCの `127.0.0.1:5180` がHTTP 200
 - [ ] `tailscale status` でホストとクライアントがonline
 - [ ] `tailscale serve status` が `127.0.0.1:5180` を指す
