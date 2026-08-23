@@ -81,17 +81,16 @@ export function buildRewriteWorkflow(userText: string, mode: GenerationMode, len
         clip: ['clip', 0],
         prompt: `${SYSTEM_PROMPT}\n${userPrompt}`,
         max_length: 768,
-        // DynamicCombo はAPIではフラット辞書で渡す(nodes_textgen.py の sampling_mode.get() 実装確認済み)
-        sampling_mode: {
-          sampling_mode: 'on',
-          temperature: 0.7,
-          top_k: 64,
-          top_p: 0.95,
-          min_p: 0.05,
-          repetition_penalty: 1.05,
-          seed: Math.floor(Math.random() * 1_000_000_000),
-          presence_penalty: 0,
-        },
+        // DynamicCombo のネスト入力は親IDプレフィックス付きのフラットな兄弟入力で渡す
+        // (comfy_api/latest/_io.py の命名規則 "parent.child"。実機で生成確認済み)
+        sampling_mode: 'on',
+        'sampling_mode.temperature': 0.7,
+        'sampling_mode.top_k': 64,
+        'sampling_mode.top_p': 0.95,
+        'sampling_mode.min_p': 0.05,
+        'sampling_mode.repetition_penalty': 1.05,
+        'sampling_mode.seed': Math.floor(Math.random() * 1_000_000_000),
+        'sampling_mode.presence_penalty': 0,
         thinking: false,
         use_default_template: true,
       },
