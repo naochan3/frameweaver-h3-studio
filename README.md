@@ -1,7 +1,46 @@
 # FrameWeaver H3 Studio
 
-ローカルPC(**RTX 4070 12GB / RAM 64GB** 想定)で動く **動画+画像生成スタジオ**。
-ComfyUI をバックエンドに、複数のAIモデルを1つのWebUIから使えます。**プロンプトはローカルLLMが自動強化**するので、一言入れるだけで本番品質の指示に変換されます。
+ローカルGPUで動く、ComfyUIベースの**動画・画像生成スタジオ**。プロンプト強化、モデル切替、履歴、LoRA、VRAM操作を、PC・Mac・スマートフォンから1つのUIで扱えます。
+
+![React](https://img.shields.io/badge/React-19-149eca?logo=react&logoColor=white)
+![ComfyUI](https://img.shields.io/badge/Backend-ComfyUI-222222)
+![Tailscale](https://img.shields.io/badge/Remote-Tailscale-242424?logo=tailscale&logoColor=white)
+![Tests](https://img.shields.io/badge/tests-89%20passing-2f855a)
+
+![FrameWeaver H3 Studio desktop UI](docs/assets/readme/studio-desktop.png)
+
+<p align="center">
+  <img src="docs/assets/readme/studio-mobile.png" width="390" alt="FrameWeaver H3 Studio mobile UI">
+</p>
+
+## ひと目で分かる特徴
+
+- MiniMax H3動画、Z-Image、Krea 2、Illustrious系SDXLを1画面で操作
+- Ollama上のローカルLLMが日本語の短い指示をモデル別プロンプトへ強化
+- 生成進捗、履歴、LoRAカタログ、停止、VRAM解放を内蔵
+- Ember / Ocean / Violetのテーマを端末ごとに保存
+- Tailscale Serveで公開インターネットへ出さず、tailnet内のPC・Mac・スマホから接続
+
+## システム構成
+
+```text
+Browser ── HTTPS/Tailscale ── FrameWeaver WebUI :5180
+                                      ├─ /comfy/*    ── ComfyUI :8189 ── GPU / Models
+                                      └─ /rewriter/* ── Ollama :11434
+```
+
+現行 `main` は**1つのFrameWeaverから1つのComfyUI**へ接続します。複数GPU PCはPCごとの独立URLとして利用できますが、共有キューやGPU自動ルーティングは未実装です。詳細は [Tailscale・複数マシン構成](docs/TAILSCALE-MULTI-MACHINE.md) を参照してください。
+
+## Quick Start
+
+```powershell
+git clone https://github.com/naochan3/frameweaver-h3-studio.git
+cd frameweaver-h3-studio
+npm ci
+start_studio.bat
+```
+
+前提モデルとComfyUIをまだ用意していない場合は、下の「セットアップ」を順番に進めてください。
 
 ## できること
 
@@ -35,9 +74,9 @@ ComfyUI をバックエンドに、複数のAIモデルを1つのWebUIから使�
 ### 1. WebUI(このリポジトリ)
 
 ```powershell
-git clone <このリポジトリ>
+git clone https://github.com/naochan3/frameweaver-h3-studio.git
 cd frameweaver-h3-studio
-npm install
+npm ci
 ```
 
 ### 2. ComfyUI バックエンド
@@ -115,6 +154,17 @@ WebUIは `0.0.0.0` 待受。同じネットワークの端末から `http://<PC�
   New-NetFirewallRule -DisplayName "FrameWeaver WebUI 5180" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 5180 -Profile Private
   ```
 - 公開はLAN内のみ(インターネットには出さない)
+
+### Tailscale経由で、どこからでも開く
+
+ローカルの5180だけをTailscale Serveでtailnet内HTTPSへ中継します。ComfyUIやOllamaの管理ポートは直接公開しません。
+
+```powershell
+tailscale serve --bg --https=10000 http://127.0.0.1:5180
+tailscale serve status
+```
+
+別端末から `https://<device>.<tailnet>.ts.net:10000/` を開きます。複数GPU PC、端末別テスト、解除方法は [docs/TAILSCALE-MULTI-MACHINE.md](docs/TAILSCALE-MULTI-MACHINE.md) にまとめています。
 
 ---
 
@@ -274,7 +324,20 @@ docs/
 start_studio.bat         Ollama→ComfyUI→WebUI をまとめて起動
 ```
 
-検証: `npm run lint` / `npm run test` / `npm run build`。
+## 検証
+
+| 段階 | コマンド・操作 | 合格条件 |
+|---|---|---|
+| 依存導入 | `npm ci` | exit 0、lockfileどおりに導入 |
+| 単体テスト | `npm test` | 全テスト成功 |
+| 静的検査 | `npm run lint` | error 0 |
+| 本番ビルド | `npm run build` | `dist/`生成、exit 0 |
+| README画像 | `npm run docs:verify` | 参照2件とPNG寸法が一致 |
+| ComfyUI | `/comfy/system_stats` | HTTP 200、GPU情報あり |
+| Tailscale | 別端末からtailnet URL | HTML/JS/CSSがHTTP 200 |
+| スマホ | 390px相当で操作 | 横スクロールなし、入力と生成ボタン表示 |
+
+スクリーンショットの更新方法は [docs/README-SCREENSHOTS.md](docs/README-SCREENSHOTS.md) を参照してください。
 
 ---
 
