@@ -120,3 +120,50 @@ describe('非同期プロンプト強化の競合防止', () => {
     expect(store.useGenerationStore.getState().imageRewriting).toBe(false)
   })
 })
+
+describe('ノード能力のストア配線', () => {
+  it('能力更新で全GPU在庫とprimary GPUのVRAMを反映する', async () => {
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith('/system_stats')) {
+        return Response.json({
+          devices: [
+            { name: 'cuda:0 Large', type: 'cuda', vram_total: 24_000, vram_free: 20_000 },
+            { name: 'cuda:1 Small', type: 'cuda', vram_total: 8_000, vram_free: 7_000 },
+          ],
+        })
+      }
+      const className = url.split('/').at(-1) ?? ''
+      const fields: Record<string, string> = {
+        CheckpointLoaderSimple: 'ckpt_name',
+        UNETLoader: 'unet_name',
+        CLIPLoader: 'clip_name',
+        VAELoader: 'vae_name',
+        LoraLoaderModelOnly: 'lora_name',
+      }
+      const field = fields[className]
+      return field
+        ? Response.json({ [className]: { input: { required: { [field]: [[`${className}.safetensors`]] } } } })
+        : new Response(null, { status: 404 })
+    })
+
+    await store.useGenerationStore.getState().refreshCapability()
+    const state = store.useGenerationStore.getState()
+
+    expect(state.capability?.devices).toHaveLength(2)
+    expect(state.capability?.status).toBe('ready')
+    expect(state.vram).toEqual({ total: 24_000, free: 20_000 })
+    expect(state.connected).toBe(true)
+  })
+
+  it('能力API停止時は古いconnectedを残さない', async () => {
+    vi.stubGlobal('fetch', async () => new Response(null, { status: 503 }))
+    store.useGenerationStore.setState({ connected: true })
+
+    await store.useGenerationStore.getState().refreshCapability()
+    const state = store.useGenerationStore.getState()
+
+    expect(state.capability?.status).toBe('unavailable')
+    expect(state.connected).toBe(false)
+  })
+})

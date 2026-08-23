@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { createAdaptivePoller, pollDelay } from '../lib/adaptive-poller'
 import { ComfyClient } from '../lib/comfy-client'
 import { DRAFT_KEYS, loadDraft, saveDraft } from '../lib/draft'
 import { pickHistoryMatch } from '../lib/history-match'
@@ -16,6 +17,7 @@ import {
   translatePromptToJa,
 } from '../lib/rewriter'
 import { patchWorkflow } from '../lib/workflow-patcher'
+import type { NodeCapabilitySnapshot } from '../lib/model-capability'
 import type { GenerationMode, GenerationParams, ImageModel, ImageParams, LoraMetaMap } from '../lib/types'
 
 // 既定は同一オリジンの /comfy(Viteプロキシ経由)。これによりPCでもLAN内の別端末でも
@@ -63,6 +65,7 @@ interface GenerationState {
   connected: boolean
   queueRemaining: number
   vram: { total: number; free: number } | null
+  capability: NodeCapabilitySnapshot | null
   /** ComfyUI 上で選択可能な LoRA 一覧(追加LoRAの候補表示用) */
   loraList: string[]
   params: GenerationParams
@@ -142,6 +145,8 @@ interface GenerationState {
   setLoraCatalogOpen: (open: boolean) => void
   /** LoRAメタを再取得する(DL進行中に最新化) */
   refreshLoraMeta: () => Promise<void>
+  /** GPU・モデル在庫をComfyUIから再取得する */
+  refreshCapability: () => Promise<void>
   /** カタログからLoRAを選択: 対象モデルへ自動切替し、追加LoRAに設定する */
   applyLoraFromCatalog: (metaKey: string) => void
   setAppTab: (tab: 'video' | 'image') => void
@@ -208,6 +213,7 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
   connected: false,
   queueRemaining: 0,
   vram: null,
+  capability: null,
   params: {
     mode: 'text',
     prompt: loadDraft(localStorage, DRAFT_KEYS.videoPrompt),
@@ -429,6 +435,21 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
   refreshLoraMeta: async () => {
     const [loraMeta, loraList] = await Promise.all([client.getLoraMeta(), client.getLoraList()])
     set({ loraMeta, loraList })
+  },
+
+  refreshCapability: async () => {
+    const capability = await client.capabilities()
+    const primary = capability.devices.reduce<(typeof capability.devices)[number] | null>(
+      (best, device) => !best || device.vramTotal > best.vramTotal ? device : best,
+      null,
+    )
+    set({
+      capability,
+      connected: capability.status === 'ready' || capability.status === 'degraded',
+      ...(primary ? { vram: { total: primary.vramTotal, free: primary.vramFree } } : {}),
+      checkpointList: capability.inventory.checkpoints,
+      loraList: capability.inventory.loras,
+    })
   },
 
   applyLoraFromCatalog: (metaKey) => {
@@ -782,8 +803,7 @@ client.onEvent((ev) => {
     case 'status':
       if (ev.message === 'connected') {
         useGenerationStore.setState({ connected: true })
-        void client.getLoraList().then((loraList) => useGenerationStore.setState({ loraList }))
-        void client.getCheckpointList().then((checkpointList) => useGenerationStore.setState({ checkpointList }))
+        void useGenerationStore.getState().refreshCapability()
         void client.getLoraMeta().then((loraMeta) => useGenerationStore.setState({ loraMeta }))
         void rewriterInstalled().then((ok) => useGenerationStore.setState({ rewriterAvailable: ok }))
         const imageModel = useGenerationStore.getState().imageParams.model
@@ -838,10 +858,37 @@ useGenerationStore.subscribe((s, prev) => {
   }
 })
 
-// VRAM 監視(5秒ポーリング)
-setInterval(async () => {
-  const stats = await client.systemStats()
-  if (stats) {
-    useGenerationStore.setState({ vram: { total: stats.vramTotal, free: stats.vramFree }, connected: true })
-  }
-}, 5000)
+// VRAMだけを軽量監視。モデル在庫は接続時または手動更新時に取得する。
+const vramPoller = createAdaptivePoller({
+  poll: async () => {
+    const stats = await client.systemStats()
+    if (stats) {
+      useGenerationStore.setState((state) => ({
+        vram: { total: stats.vramTotal, free: stats.vramFree },
+        connected: true,
+        capability: state.capability
+          ? {
+              ...state.capability,
+              capturedAt: new Date().toISOString(),
+              status: state.capability.errors.length > 0 ? 'degraded' : 'ready',
+              devices: state.capability.devices.length > 0
+                ? state.capability.devices.map((device, index) => index === 0
+                    ? { ...device, vramTotal: stats.vramTotal, vramFree: stats.vramFree }
+                    : device)
+                : state.capability.devices,
+            }
+          : null,
+      }))
+      return
+    }
+    useGenerationStore.setState((state) => ({
+      connected: false,
+      capability: state.capability ? { ...state.capability, status: 'stale' } : null,
+    }))
+  },
+  delay: () => pollDelay(
+    useGenerationStore.getState().status,
+    typeof document === 'undefined' ? 'visible' : document.visibilityState,
+  ),
+})
+vramPoller.start()

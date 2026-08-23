@@ -305,7 +305,7 @@ export class ComfyClient {
 
   async systemStats(): Promise<{ vramTotal: number; vramFree: number } | null> {
     try {
-      const res = await fetch(`${this.baseUrl}/system_stats`)
+      const res = await fetch(`${this.baseUrl}/system_stats`, { signal: AbortSignal.timeout(2_000) })
       if (!res.ok) return null
       const json = (await res.json()) as { devices?: Array<{ vram_total?: number; vram_free?: number }> }
       const dev = json.devices?.[0]
