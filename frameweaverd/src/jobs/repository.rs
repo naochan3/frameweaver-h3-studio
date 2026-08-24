@@ -1,6 +1,7 @@
 use std::{error::Error, path::Path, str::FromStr, time::Duration};
 
 use chrono::{SecondsFormat, Utc};
+use serde_json::Value;
 use sqlx::{
     Row, SqlitePool,
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions},
@@ -63,6 +64,47 @@ impl JobRepository {
         self.get_by_id(&id).await
     }
 
+    /// Stores a client-generated request key before upstream submission. Replays return
+    /// the original durable job so a dropped response cannot submit twice.
+    pub async fn create_or_get_routed(
+        &self,
+        new_job: NewJob,
+        worker_id: Option<&str>,
+        request_key: &str,
+    ) -> RepositoryResult<(Job, bool)> {
+        let id = Uuid::new_v4().to_string();
+        let timestamp = utc_timestamp();
+        let result = sqlx::query(
+            "INSERT OR IGNORE INTO jobs (id, owner_id, worker_id, kind, mode, status, prompt, settings_json, request_key, created_at, updated_at) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(&id)
+        .bind(&new_job.owner_id)
+        .bind(worker_id)
+        .bind(&new_job.kind)
+        .bind(&new_job.mode)
+        .bind(JobStatus::Queued.as_str())
+        .bind(&new_job.prompt)
+        .bind(&new_job.settings_json)
+        .bind(request_key)
+        .bind(&timestamp)
+        .bind(&timestamp)
+        .execute(&self.pool)
+        .await?;
+        if result.rows_affected() == 1 {
+            return Ok((self.get_by_id(&id).await?, true));
+        }
+        let row = sqlx::query(
+            "SELECT id, owner_id, worker_id, kind, mode, status, prompt, settings_json, output_json, error, \
+             created_at, updated_at, started_at, finished_at FROM jobs WHERE owner_id = ? AND request_key = ?",
+        )
+        .bind(&new_job.owner_id)
+        .bind(request_key)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok((job_from_row(row)?, false))
+    }
+
     pub async fn get_for_owner(&self, id: &str, owner_id: &str) -> RepositoryResult<Option<Job>> {
         let row = sqlx::query(
             "SELECT id, owner_id, worker_id, kind, mode, status, prompt, settings_json, output_json, error, \
@@ -73,6 +115,39 @@ impl JobRepository {
         .fetch_optional(&self.pool)
         .await?;
         row.map(job_from_row).transpose()
+    }
+
+    pub async fn worker_for_owned_output(
+        &self,
+        id: &str,
+        owner_id: &str,
+        filename: &str,
+        subfolder: &str,
+        kind: &str,
+    ) -> RepositoryResult<Option<String>> {
+        let Some(job) = self.get_for_owner(id, owner_id).await? else {
+            return Ok(None);
+        };
+        let Some(output_json) = job.output_json else {
+            return Ok(None);
+        };
+        let matches_output = serde_json::from_str::<Vec<Value>>(&output_json)
+            .unwrap_or_default()
+            .iter()
+            .any(|output| {
+                output.get("filename").and_then(Value::as_str) == Some(filename)
+                    && output
+                        .get("subfolder")
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        == subfolder
+                    && output
+                        .get("type")
+                        .and_then(Value::as_str)
+                        .unwrap_or("output")
+                        == kind
+            });
+        Ok(matches_output.then_some(job.worker_id).flatten())
     }
 
     pub async fn list_for_owner(&self, owner_id: &str, limit: u32) -> RepositoryResult<Vec<Job>> {

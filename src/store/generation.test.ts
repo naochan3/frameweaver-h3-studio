@@ -55,7 +55,7 @@ describe('generation store API history integration', () => {
       expect(useGenerationStore.getState().history).toEqual([expect.objectContaining({
         promptId: completedJob.id,
         filename: 'result.png',
-        videoUrl: 'http://127.0.0.1:8188/comfy/view?filename=result.png&subfolder=images&type=output',
+        videoUrl: 'http://127.0.0.1:8188/comfy/view?filename=result.png&subfolder=images&type=output&prompt_id=22222222-2222-4222-8222-222222222222',
       })])
     })
     expect(historyFromJob(completedJob)).toEqual(expect.objectContaining({ filename: 'result.png' }))

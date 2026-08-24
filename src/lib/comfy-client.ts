@@ -220,12 +220,13 @@ export class ComfyClient {
     return outputs
   }
 
-  viewUrl(output: HistoryOutput): string {
+  viewUrl(output: HistoryOutput, promptId?: string): string {
     const params = new URLSearchParams({
       filename: output.filename,
       subfolder: output.subfolder,
       type: output.type,
     })
+    if (promptId) params.set('prompt_id', promptId)
     return `${this.baseUrl}/view?${params}`
   }
 

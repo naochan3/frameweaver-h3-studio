@@ -72,11 +72,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             .merge(protect_router(
                 build_fleet_router(fleet)
                     .merge(build_workers_router(workers.clone()))
-                    .merge(build_jobs_router(repository, workers))
-                    .merge(build_proxy_router(ProxyConfig::new(
-                        config.comfy_url().clone(),
-                        std::time::Duration::from_secs(30),
-                    ))),
+                    .merge(build_jobs_router(repository.clone(), workers.clone()))
+                    .merge(build_proxy_router(
+                        ProxyConfig::new(
+                            config.comfy_url().clone(),
+                            std::time::Duration::from_secs(30),
+                        )
+                        .with_job_routing(repository, workers),
+                    )),
                 auth,
             ))
             .fallback_service(static_files::build_router(std::path::PathBuf::from("dist"))),

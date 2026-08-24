@@ -41,6 +41,8 @@ struct CreateJobRequest {
     settings: Value,
     workflow: Value,
     #[serde(default)]
+    request_id: Option<String>,
+    #[serde(default)]
     worker_preference: Option<WorkerPreference>,
 }
 
@@ -154,6 +156,10 @@ async fn create_job(
 ) -> Result<(StatusCode, Json<Job>), ApiError> {
     let started = Instant::now();
     if Uuid::parse_str(&request.client_id).is_err()
+        || request
+            .request_id
+            .as_deref()
+            .is_some_and(|id| Uuid::parse_str(id).is_err())
         || !matches!(request.kind.as_str(), "image" | "video")
         || request.mode.is_empty()
         || request.prompt.is_empty()
@@ -180,20 +186,31 @@ async fn create_job(
         .workers
         .client(&worker_id)
         .ok_or_else(ApiError::service_unavailable)?;
-    let job = state
-        .repository
-        .create_routed(
-            NewJob {
-                owner_id: owner_id.clone(),
-                kind: request.kind,
-                mode: request.mode,
-                prompt: request.prompt,
-                settings_json: request.settings.to_string(),
-            },
-            Some(worker_id.as_str()),
-        )
-        .await
-        .map_err(|_| ApiError::internal())?;
+    let new_job = NewJob {
+        owner_id: owner_id.clone(),
+        kind: request.kind,
+        mode: request.mode,
+        prompt: request.prompt,
+        settings_json: request.settings.to_string(),
+    };
+    let (job, created) = match request.request_id.as_deref() {
+        Some(request_id) => {
+            state
+                .repository
+                .create_or_get_routed(new_job, Some(worker_id.as_str()), request_id)
+                .await
+        }
+        None => state
+            .repository
+            .create_routed(new_job, Some(worker_id.as_str()))
+            .await
+            .map(|job| (job, true)),
+    }
+    .map_err(|_| ApiError::internal())?;
+
+    if !created {
+        return Ok((StatusCode::OK, Json(job)));
+    }
 
     if let Err(error) = comfy
         .submit(&job.id, &request.client_id, request.workflow)

@@ -79,6 +79,10 @@ impl ComfyApi {
         })
     }
 
+    pub fn base_url(&self) -> Url {
+        self.base_url.clone()
+    }
+
     pub async fn worker_metrics(&self) -> ComfyResult<(u64, u32)> {
         let stats = self
             .client

@@ -19,7 +19,12 @@ use tokio_tungstenite::{
 };
 use uuid::Uuid;
 
-use crate::events::OperationEvent;
+use crate::{
+    auth::AuthenticatedIdentity,
+    events::OperationEvent,
+    jobs::JobRepository,
+    workers::{WorkerId, WorkerRegistry},
+};
 
 const MAX_PROXY_BODY_BYTES: usize = 64 * 1024 * 1024;
 const MAX_PROXY_RESPONSE_BYTES: usize = 8 * 1024 * 1024;
@@ -30,6 +35,13 @@ pub struct ProxyConfig {
     timeout: Duration,
     response_limit: usize,
     client: reqwest::Client,
+    routing: Option<ProxyRouting>,
+}
+
+#[derive(Clone)]
+struct ProxyRouting {
+    repository: JobRepository,
+    workers: WorkerRegistry,
 }
 
 impl ProxyConfig {
@@ -39,11 +51,20 @@ impl ProxyConfig {
             timeout,
             response_limit: MAX_PROXY_RESPONSE_BYTES,
             client: reqwest::Client::new(),
+            routing: None,
         }
     }
 
     pub fn with_response_limit(mut self, response_limit: usize) -> Self {
         self.response_limit = response_limit;
+        self
+    }
+
+    pub fn with_job_routing(mut self, repository: JobRepository, workers: WorkerRegistry) -> Self {
+        self.routing = Some(ProxyRouting {
+            repository,
+            workers,
+        });
         self
     }
 }
@@ -86,7 +107,11 @@ async fn proxy_http(config: ProxyConfig, path: String, request: Request) -> Resp
         Ok(body) => body,
         Err(_) => return StatusCode::PAYLOAD_TOO_LARGE.into_response(),
     };
-    let url = match controlled_upstream_url(&config.upstream, &path, parts.uri.query()) {
+    let upstream = match upstream_for_request(&config, &path, parts.uri.query(), &parts).await {
+        Some(upstream) => upstream,
+        None => return StatusCode::FORBIDDEN.into_response(),
+    };
+    let url = match controlled_upstream_url(&upstream, &path, parts.uri.query()) {
         Some(url) => url,
         None => {
             OperationEvent::new("proxy_http", "normalization_failed", started.elapsed()).warn();
@@ -105,7 +130,7 @@ async fn proxy_http(config: ProxyConfig, path: String, request: Request) -> Resp
     {
         builder = builder.header(name, value);
     }
-    builder = builder.header(header::ORIGIN, origin(&config.upstream));
+    builder = builder.header(header::ORIGIN, origin(&upstream));
     match builder.send().await {
         Ok(response) => {
             OperationEvent::new("proxy_http", "upstream_response", started.elapsed()).info();
@@ -124,6 +149,68 @@ async fn proxy_http(config: ProxyConfig, path: String, request: Request) -> Resp
             StatusCode::BAD_GATEWAY.into_response()
         }
     }
+}
+
+async fn upstream_for_request(
+    config: &ProxyConfig,
+    path: &str,
+    query: Option<&str>,
+    parts: &axum::http::request::Parts,
+) -> Option<Url> {
+    let Some(routing) = &config.routing else {
+        return Some(config.upstream.clone());
+    };
+    let owner = parts
+        .extensions
+        .get::<AuthenticatedIdentity>()
+        .map(|identity| identity.0.owner_id.to_string())
+        .or_else(|| {
+            parts
+                .headers
+                .get("X-FrameWeaver-Owner")
+                .and_then(|value| value.to_str().ok())
+                .filter(|value| Uuid::parse_str(value).is_ok())
+                .map(str::to_owned)
+        })?;
+    let job_id = if let Some(id) = path.strip_prefix("history/") {
+        id.to_owned()
+    } else if path == "view" {
+        url::form_urlencoded::parse(query.unwrap_or_default().as_bytes())
+            .find_map(|(key, value)| (key == "prompt_id").then(|| value.into_owned()))?
+    } else {
+        return Some(config.upstream.clone());
+    };
+    let job = routing
+        .repository
+        .get_for_owner(&job_id, &owner)
+        .await
+        .ok()??;
+    let worker_id = if path == "view" {
+        let params =
+            url::form_urlencoded::parse(query.unwrap_or_default().as_bytes()).collect::<Vec<_>>();
+        let value = |name| {
+            params
+                .iter()
+                .find_map(|(key, value)| (key == name).then(|| value.as_ref()))
+        };
+        routing
+            .repository
+            .worker_for_owned_output(
+                &job_id,
+                &owner,
+                value("filename")?,
+                value("subfolder").unwrap_or(""),
+                value("type").unwrap_or("output"),
+            )
+            .await
+            .ok()??
+    } else {
+        job.worker_id?
+    };
+    routing
+        .workers
+        .client(&WorkerId::new(worker_id).ok()?)
+        .map(|client| client.base_url())
 }
 
 fn allowed_http_route(method: &axum::http::Method, path: &str) -> bool {

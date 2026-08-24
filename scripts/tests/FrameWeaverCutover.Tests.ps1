@@ -94,6 +94,27 @@ Describe 'FrameWeaver gated cutover' {
         $global:cutoverStartCalls | Should Be 2
     }
 
+    It 'automatically restores the XML backup when task installation fails after the old service is stopped' {
+        $root = Join-Path $TestDrive 'repo'
+        $scripts = Join-Path $root 'scripts'
+        New-Item -ItemType Directory -Force -Path $scripts | Out-Null
+        Set-Content -LiteralPath (Join-Path $scripts 'Install-FrameWeaverdTask.ps1') -Value 'throw "install failed"'
+        function global:Get-NetTCPConnection { $null }
+        function global:Get-ScheduledTask { [pscustomobject]@{ TaskName = 'FrameWeaver-H3-Studio' } }
+        function global:Export-ScheduledTask { '<Task version="1.4" />' }
+        function global:Register-ScheduledTask { $global:cutoverRegisterCalls++; [pscustomobject]@{} }
+        function global:Start-ScheduledTask { $global:cutoverStartCalls++ }
+        function global:Invoke-WebRequest { [pscustomobject]@{ StatusCode = 200 } }
+        function global:Invoke-RestMethod { param($Uri); if ($Uri -match '/api/fleet') { return [pscustomobject]@{ samples = @() } }; throw 'new daemon must not be probed after install failure' }
+
+        $failure = $null
+        try { & $cutover -ProjectRoot $root -Apply -BackupDirectory $TestDrive -RetryTimeoutSeconds 1 -RetryIntervalMilliseconds 1 | Out-Null } catch { $failure = $_.Exception.Message }
+
+        $failure | Should Match 'automatic rollback restored'
+        $global:cutoverRegisterCalls | Should Be 1
+        $global:cutoverStartCalls | Should Be 1
+    }
+
     It 'rolls back only a verified ready daemon after restoring the mandatory XML backup' {
         $backup = Join-Path $TestDrive 'FrameWeaver-H3-Studio.xml'
         Set-Content -LiteralPath $backup -Value '<Task version="1.4" />'

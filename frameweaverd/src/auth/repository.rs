@@ -24,7 +24,8 @@ pub struct SessionIdentity {
 #[derive(Clone)]
 pub struct AuthRepository {
     pool: SqlitePool,
-    key: Vec<u8>,
+    session_key: Vec<u8>,
+    identity_key: Vec<u8>,
 }
 
 impl AuthRepository {
@@ -43,9 +44,19 @@ impl AuthRepository {
             .connect_with(options)
             .await?;
         sqlx::migrate!("./migrations").run(&pool).await?;
+        let generated_identity_key = rand::random::<[u8; 32]>().to_vec();
+        sqlx::query("INSERT OR IGNORE INTO auth_identity_key (id, key) VALUES (1, ?)")
+            .bind(generated_identity_key)
+            .execute(&pool)
+            .await?;
+        let identity_key: Vec<u8> = sqlx::query("SELECT key FROM auth_identity_key WHERE id = 1")
+            .fetch_one(&pool)
+            .await?
+            .try_get("key")?;
         Ok(Self {
             pool,
-            key: key.to_vec(),
+            session_key: key.to_vec(),
+            identity_key,
         })
     }
 
@@ -105,7 +116,7 @@ impl AuthRepository {
     }
 
     pub fn owner_for_discord_id(&self, discord_user_id: &str) -> Uuid {
-        let digest = self.digest_bytes("owner", discord_user_id);
+        let digest = self.digest_with_key(&self.identity_key, "owner", discord_user_id);
         let mut bytes = [0_u8; 16];
         bytes.copy_from_slice(&digest[..16]);
         bytes[6] = (bytes[6] & 0x0f) | 0x40;
@@ -176,7 +187,11 @@ impl AuthRepository {
         hex(&self.digest_bytes(domain, value))
     }
     fn digest_bytes(&self, domain: &str, value: &str) -> Vec<u8> {
-        let mut mac = HmacSha256::new_from_slice(&self.key).expect("HMAC accepts any key length");
+        self.digest_with_key(&self.session_key, domain, value)
+    }
+
+    fn digest_with_key(&self, key: &[u8], domain: &str, value: &str) -> Vec<u8> {
+        let mut mac = HmacSha256::new_from_slice(key).expect("HMAC accepts any key length");
         mac.update(b"frameweaver\0");
         mac.update(domain.as_bytes());
         mac.update(b"\0");

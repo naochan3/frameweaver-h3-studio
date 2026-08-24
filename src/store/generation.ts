@@ -207,7 +207,7 @@ export function historyFromJob(job: FrameWeaverJob): HistoryItem {
     mode: job.mode,
     prompt: job.prompt,
     nsfw: job.kind === 'video' && settings?.nsfw === true,
-    videoUrl: output ? client.viewUrl(output) : '',
+    videoUrl: output ? client.viewUrl(output, job.id) : '',
     filename: output?.filename ?? job.id,
     createdAt: job.created_at,
     settings,
@@ -533,7 +533,7 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
     try {
       const wf = buildImageWorkflow(imageParams)
       const job = await frameWeaverApi.createJob({
-        client_id: client.clientId, worker_preference: get().workerPreference,
+        client_id: client.clientId, request_id: crypto.randomUUID(), worker_preference: get().workerPreference,
         kind: 'image', mode: imageParams.model, prompt: imageParams.prompt, settings: imageParams, workflow: wf,
       })
       set({ currentPromptId: job.id })
@@ -691,7 +691,7 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
       const paramsWithSources = { ...params, images: sources.map((source) => source.name) }
       const wf = patchWorkflow(paramsWithSources)
       const job = await frameWeaverApi.createJob({
-        client_id: client.clientId, worker_preference: get().workerPreference,
+        client_id: client.clientId, request_id: crypto.randomUUID(), worker_preference: get().workerPreference,
         kind: 'video', mode: params.mode, prompt: params.prompt, settings: paramsWithSources, workflow: wf,
       })
       set({ currentPromptId: job.id })
@@ -728,7 +728,7 @@ async function handleDone(promptId: string) {
     useGenerationStore.setState({ status: 'error', error: '出力ファイルが見つかりませんでした' })
     return
   }
-  const url = client.viewUrl(output)
+  const url = client.viewUrl(output, promptId)
   const item: HistoryItem = {
     promptId,
     kind: currentKind,

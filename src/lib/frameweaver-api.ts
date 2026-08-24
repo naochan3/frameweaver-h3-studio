@@ -24,6 +24,8 @@ export interface FrameWeaverJob {
 
 export interface CreateJobRequest {
   client_id: string
+  /** Reused only when retrying the same submission; prevents duplicate GPU work. */
+  request_id?: string
   kind: 'image' | 'video'
   mode: string
   prompt: string

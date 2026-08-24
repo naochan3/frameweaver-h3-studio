@@ -151,18 +151,20 @@ function Invoke-ApplyCutover {
     $oldProbe = if ($old) { Get-OldServiceProbe -LocalPort $LocalPort -TimeoutSeconds $TimeoutSeconds -IntervalMilliseconds $IntervalMilliseconds } else { $null }
     $backup = Save-TaskBackup -Name $Name -Directory $Directory
     $manifest = Save-CutoverManifest -Directory $Directory -Name $Name -LocalPort $LocalPort -TaskBackup $backup -OldProcess $old -OldProbe $oldProbe
-    if ($old) { Stop-Process -Id $old.Pid -Force -ErrorAction Stop }
-    if (-not (Wait-PortFree -LocalPort $LocalPort)) { throw 'port did not become free after stopping the verified Vite launcher' }
-    $installer = Join-Path $Root 'scripts\Install-FrameWeaverdTask.ps1'
-    & $installer -TaskName $Name -ProjectRoot $Root -RollbackPath (Join-Path $Directory "$Name-rollback.ps1") -Apply | Out-Null
-    Start-ScheduledTask -TaskName $Name
-    try { $health = Get-ReadyHealth -LocalPort $LocalPort -TimeoutSeconds $TimeoutSeconds -IntervalMilliseconds $IntervalMilliseconds } catch {
-        $healthFailure = $_.Exception.Message
+    try {
+        if ($old) { Stop-Process -Id $old.Pid -Force -ErrorAction Stop }
+        if (-not (Wait-PortFree -LocalPort $LocalPort)) { throw 'port did not become free after stopping the verified Vite launcher' }
+        $installer = Join-Path $Root 'scripts\Install-FrameWeaverdTask.ps1'
+        & $installer -TaskName $Name -ProjectRoot $Root -RollbackPath (Join-Path $Directory "$Name-rollback.ps1") -Apply | Out-Null
+        Start-ScheduledTask -TaskName $Name
+        $health = Get-ReadyHealth -LocalPort $LocalPort -TimeoutSeconds $TimeoutSeconds -IntervalMilliseconds $IntervalMilliseconds
+    } catch {
+        $cutoverFailure = $_.Exception.Message
         try {
             $stopped = Stop-VerifiedDaemonOrFailClosed -Root $Root -LocalPort $LocalPort
             $restored = Restore-OldTask -Name $Name -Backup $backup -Manifest (Get-Content -Raw -LiteralPath $manifest | ConvertFrom-Json) -LocalPort $LocalPort -TimeoutSeconds $TimeoutSeconds -IntervalMilliseconds $IntervalMilliseconds
-        } catch { throw "new daemon health failed: $healthFailure; automatic rollback did not complete: $($_.Exception.Message)" }
-        throw "new daemon health failed: $healthFailure; automatic rollback restored the saved task XML and legacy probe contract."
+        } catch { throw "cutover failed: $cutoverFailure; automatic rollback did not complete: $($_.Exception.Message)" }
+        throw "cutover failed: $cutoverFailure; automatic rollback restored the saved task XML and legacy probe contract."
     }
     [pscustomobject]@{ Applied = $true; TaskName = $Name; BackupPath = $backup; ManifestPath = $manifest; Health = $health; OldPid = if ($old) { $old.Pid } else { $null } }
 }

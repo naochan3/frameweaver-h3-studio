@@ -237,3 +237,22 @@ async fn sessions_are_hashed_expire_revoke_and_recheck_current_allowlist() {
     assert!(!stored.contains("raw-session-token"));
     assert!(!stored.contains("123456789012345678"));
 }
+
+#[tokio::test]
+async fn owner_identity_survives_session_secret_rotation() {
+    let path = database_path();
+    let first = AuthRepository::open(&path, b"0123456789abcdef0123456789abcdef")
+        .await
+        .unwrap();
+    let owner = first.owner_for_discord_id("123456789012345678");
+    drop(first);
+
+    let rotated = AuthRepository::open(&path, b"abcdef0123456789abcdef0123456789")
+        .await
+        .unwrap();
+    assert_eq!(
+        rotated.owner_for_discord_id("123456789012345678"),
+        owner,
+        "rotating session-token hashing must not strand a user's jobs"
+    );
+}

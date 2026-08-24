@@ -17,8 +17,11 @@ use axum::{
     routing::{any, get},
 };
 use frameweaverd::{
+    comfy::ComfyApi,
+    jobs::{JobRepository, NewJob},
     proxy::{ProxyConfig, build_router as build_proxy_router, controlled_upstream_url},
     static_files::build_router as build_static_router,
+    workers::WorkerRegistry,
 };
 use futures_util::{SinkExt, StreamExt};
 use tokio::net::TcpListener;
@@ -317,6 +320,72 @@ async fn proxy_rewrites_comfy_path_and_origin() {
         Some(upstream_url.as_str())
     );
 
+    proxy_server.abort();
+    upstream_server.abort();
+}
+
+#[tokio::test]
+async fn routed_history_is_sent_only_to_its_owner_and_recorded_worker() {
+    let record = UpstreamRecord::default();
+    let (upstream_url, upstream_server) = start_server(
+        Router::new()
+            .fallback(any(upstream))
+            .with_state(record.clone()),
+    )
+    .await;
+    let repository = JobRepository::open(
+        std::env::temp_dir().join(format!("frameweaver-proxy-{}.db", Uuid::new_v4())),
+    )
+    .await
+    .unwrap();
+    let owner = Uuid::new_v4().to_string();
+    let job = repository
+        .create_routed(
+            NewJob {
+                owner_id: owner.clone(),
+                kind: "image".into(),
+                mode: "txt2img".into(),
+                prompt: "safe".into(),
+                settings_json: "{}".into(),
+            },
+            Some("rtx4090"),
+        )
+        .await
+        .unwrap();
+    let comfy = ComfyApi::new(upstream_url.parse().unwrap()).unwrap();
+    let (base_url, proxy_server) = start_server(build_proxy_router(
+        ProxyConfig::new(
+            "http://127.0.0.1:9".parse().unwrap(),
+            Duration::from_secs(1),
+        )
+        .with_job_routing(repository, WorkerRegistry::local(comfy)),
+    ))
+    .await;
+    let client = reqwest::Client::new();
+    assert_eq!(
+        client
+            .get(format!("{base_url}/comfy/history/{}", job.id))
+            .header("X-FrameWeaver-Owner", &owner)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK
+    );
+    assert_eq!(
+        client
+            .get(format!("{base_url}/comfy/history/{}", job.id))
+            .header("X-FrameWeaver-Owner", Uuid::new_v4().to_string())
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        record.request_path.lock().unwrap().as_deref(),
+        Some(format!("/history/{}", job.id).as_str())
+    );
     proxy_server.abort();
     upstream_server.abort();
 }
