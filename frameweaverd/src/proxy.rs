@@ -6,7 +6,7 @@ use std::{
 use axum::{
     Router,
     body::{Body, to_bytes},
-    extract::{Path, Request, State, WebSocketUpgrade},
+    extract::{Extension, Path, Request, State, WebSocketUpgrade},
     http::{HeaderMap, HeaderValue, StatusCode, Uri, header},
     response::{IntoResponse, Response},
     routing::any,
@@ -88,8 +88,16 @@ async fn proxy_websocket(
     State(config): State<ProxyConfig>,
     uri: Uri,
     upgrade: WebSocketUpgrade,
+    identity: Option<Extension<AuthenticatedIdentity>>,
 ) -> Response {
-    websocket(upgrade, config, "ws".to_owned(), uri).await
+    websocket(
+        upgrade,
+        config,
+        "ws".to_owned(),
+        uri,
+        identity.map(|identity| identity.0.0.owner_id.to_string()),
+    )
+    .await
 }
 
 async fn proxy_http(config: ProxyConfig, path: String, request: Request) -> Response {
@@ -304,8 +312,13 @@ async fn websocket(
     config: ProxyConfig,
     path: String,
     uri: Uri,
+    authenticated_owner: Option<String>,
 ) -> Response {
-    let upstream = match controlled_upstream_url(&config.upstream, &path, uri.query()) {
+    let upstream_base = match websocket_upstream(&config, uri.query(), authenticated_owner).await {
+        Some(upstream) => upstream,
+        None => return StatusCode::FORBIDDEN.into_response(),
+    };
+    let upstream = match controlled_upstream_url(&upstream_base, &path, uri.query()) {
         Some(url) => url,
         None => return StatusCode::BAD_GATEWAY.into_response(),
     };
@@ -314,8 +327,40 @@ async fn websocket(
         .find_map(|(key, value)| (key == "clientId").then(|| value.into_owned()))
         .filter(|value| Uuid::parse_str(value).is_ok());
     upgrade.on_upgrade(move |socket| {
-        tunnel_websocket(socket, upstream, origin(&config.upstream), client_id)
+        tunnel_websocket(socket, upstream, origin(&upstream_base), client_id)
     })
+}
+
+async fn websocket_upstream(
+    config: &ProxyConfig,
+    query: Option<&str>,
+    authenticated_owner: Option<String>,
+) -> Option<Url> {
+    let Some(routing) = &config.routing else {
+        return Some(config.upstream.clone());
+    };
+    let params =
+        url::form_urlencoded::parse(query.unwrap_or_default().as_bytes()).collect::<Vec<_>>();
+    let value = |name| {
+        params
+            .iter()
+            .find_map(|(key, value)| (key == name).then(|| value.as_ref()))
+    };
+    let owner = authenticated_owner.or_else(|| {
+        value("owner")
+            .filter(|owner| Uuid::parse_str(owner).is_ok())
+            .map(str::to_owned)
+    })?;
+    let job_id = value("prompt_id")?;
+    let job = routing
+        .repository
+        .get_for_owner(job_id, &owner)
+        .await
+        .ok()??;
+    routing
+        .workers
+        .client(&WorkerId::new(job.worker_id?).ok()?)
+        .map(|client| client.base_url())
 }
 
 async fn tunnel_websocket(

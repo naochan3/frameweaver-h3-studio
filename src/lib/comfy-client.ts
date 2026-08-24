@@ -1,4 +1,5 @@
 import type { LoraMetaMap, WorkflowJson } from './types'
+import { getOwnerId } from './frameweaver-api'
 import { collectNodeCapability } from './capability-collector'
 import type { NodeCapabilitySnapshot } from './model-capability'
 
@@ -40,6 +41,7 @@ export class ComfyClient {
   private ws: WebSocket | null = null
   private listeners = new Set<(ev: ProgressEvent) => void>()
   private lastPreviewUrl: string | null = null
+  private activePromptId: string | null = null
 
   constructor(baseUrl: string) {
     this.baseUrl = baseUrl.replace(/\/$/, '')
@@ -55,16 +57,26 @@ export class ComfyClient {
     for (const cb of this.listeners) cb(ev)
   }
 
-  connect() {
+  connect(promptId?: string) {
+    if (promptId && promptId !== this.activePromptId) {
+      this.activePromptId = promptId
+      this.ws?.close()
+      this.ws = null
+    }
     if (this.ws && this.ws.readyState <= WebSocket.OPEN) return
-    const wsUrl = this.baseUrl.replace(/^http/, 'ws') + `/ws?clientId=${this.clientId}`
+    const params = new URLSearchParams({ clientId: this.clientId })
+    if (this.activePromptId) {
+      params.set('prompt_id', this.activePromptId)
+      params.set('owner', getOwnerId())
+    }
+    const wsUrl = this.baseUrl.replace(/^http/, 'ws') + `/ws?${params}`
     this.ws = new WebSocket(wsUrl)
     this.ws.binaryType = 'arraybuffer'
     this.ws.onmessage = (msg) => this.handleMessage(msg)
     this.ws.onclose = () => {
       this.emit({ type: 'status', message: 'disconnected' })
       // 3秒後に自動再接続
-      setTimeout(() => this.connect(), 3000)
+      setTimeout(() => this.connect(this.activePromptId ?? undefined), 3000)
     }
     this.ws.onopen = () => this.emit({ type: 'status', message: 'connected' })
   }

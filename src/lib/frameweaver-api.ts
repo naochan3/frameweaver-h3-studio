@@ -34,6 +34,15 @@ export interface CreateJobRequest {
   worker_preference?: { mode: 'auto' } | { mode: 'explicit'; worker_id: string }
 }
 
+export class FrameWeaverApiError extends Error {
+  readonly status: number
+
+  constructor(message: string, status: number) {
+    super(message)
+    this.status = status
+  }
+}
+
 function newOwnerId(): string {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID()
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (character) => {
@@ -72,7 +81,7 @@ export class FrameWeaverApi {
   private async json<T>(response: Response): Promise<T> {
     if (response.ok) return response.json() as Promise<T>
     const body = await response.json().catch(() => null) as { error?: string } | null
-    throw new Error(body?.error ?? `ジョブ API リクエスト失敗 (${response.status})`)
+    throw new FrameWeaverApiError(body?.error ?? `ジョブ API リクエスト失敗 (${response.status})`, response.status)
   }
 
   async createJob(request: CreateJobRequest): Promise<FrameWeaverJob> {

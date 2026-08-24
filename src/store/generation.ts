@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { ComfyClient, type HistoryOutput } from '../lib/comfy-client'
-import { clearLegacyHistory, frameWeaverApi, takeLegacyHistory, type FrameWeaverJob } from '../lib/frameweaver-api'
+import { clearLegacyHistory, FrameWeaverApiError, frameWeaverApi, takeLegacyHistory, type FrameWeaverJob } from '../lib/frameweaver-api'
 import { DRAFT_KEYS, loadDraft, saveDraft } from '../lib/draft'
 import { createAdaptivePoller, pollDelay } from '../lib/adaptive-poller'
 import { buildImageWorkflow } from '../lib/image-workflow'
@@ -86,6 +86,7 @@ interface GenerationState {
   stepTimestamps: number[]
   previewUrl: string | null
   currentPromptId: string | null
+  pendingRequestId: string | null
   /** 現在実行中ジョブの種別 */
   currentKind: OutputKind
   videoUrl: string | null
@@ -257,6 +258,7 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
   stepTimestamps: [],
   previewUrl: null,
   currentPromptId: null,
+  pendingRequestId: null,
   currentKind: 'video',
   videoUrl: null,
   resultKind: 'video',
@@ -530,15 +532,18 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
       stepTimestamps: [],
       currentKind: 'image',
     })
+    const requestId = get().pendingRequestId ?? crypto.randomUUID()
+    set({ pendingRequestId: requestId })
     try {
       const wf = buildImageWorkflow(imageParams)
       const job = await frameWeaverApi.createJob({
-        client_id: client.clientId, request_id: crypto.randomUUID(), worker_preference: get().workerPreference,
+        client_id: client.clientId, request_id: requestId, worker_preference: get().workerPreference,
         kind: 'image', mode: imageParams.model, prompt: imageParams.prompt, settings: imageParams, workflow: wf,
       })
-      set({ currentPromptId: job.id })
+      client.connect(job.id)
+      set({ currentPromptId: job.id, pendingRequestId: null })
     } catch (e) {
-      set({ status: 'error', error: e instanceof Error ? e.message : String(e) })
+      set({ status: 'error', error: e instanceof Error ? e.message : String(e), pendingRequestId: e instanceof FrameWeaverApiError && e.status < 500 ? null : requestId })
     }
   },
 
@@ -687,16 +692,19 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
       stepTimestamps: [],
       currentKind: 'video',
     })
+    const requestId = get().pendingRequestId ?? crypto.randomUUID()
+    set({ pendingRequestId: requestId })
     try {
       const paramsWithSources = { ...params, images: sources.map((source) => source.name) }
       const wf = patchWorkflow(paramsWithSources)
       const job = await frameWeaverApi.createJob({
-        client_id: client.clientId, request_id: crypto.randomUUID(), worker_preference: get().workerPreference,
+        client_id: client.clientId, request_id: requestId, worker_preference: get().workerPreference,
         kind: 'video', mode: params.mode, prompt: params.prompt, settings: paramsWithSources, workflow: wf,
       })
-      set({ currentPromptId: job.id })
+      client.connect(job.id)
+      set({ currentPromptId: job.id, pendingRequestId: null })
     } catch (e) {
-      set({ status: 'error', error: e instanceof Error ? e.message : String(e) })
+      set({ status: 'error', error: e instanceof Error ? e.message : String(e), pendingRequestId: e instanceof FrameWeaverApiError && e.status < 500 ? null : requestId })
     }
   },
 

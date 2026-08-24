@@ -20,6 +20,7 @@ const environment = vi.hoisted(() => {
     onmessage: ((message: MessageEvent) => void) | null = null
     onclose: (() => void) | null = null
     onopen: (() => void) | null = null
+    close() { this.readyState = 3 }
   }
   vi.stubGlobal('localStorage', {
     getItem: (key: string) => storage.get(key) ?? null,
@@ -76,6 +77,31 @@ describe('generation store API history integration', () => {
     await useGenerationStore.getState().stop()
 
     expect(useGenerationStore.getState()).toMatchObject({ currentPromptId: completedJob.id, status: 'running' })
+  })
+
+  it('reuses the request ID after a lost create response', async () => {
+    const payloads: unknown[] = []
+    environment.fetch
+      .mockRejectedValueOnce(new TypeError('network lost after submit'))
+      .mockImplementationOnce(async (...args: unknown[]) => {
+        const init = args[1] as RequestInit
+        payloads.push(JSON.parse(String(init.body)))
+        return Response.json({ ...completedJob, status: 'queued' })
+      })
+    useGenerationStore.setState((state) => ({
+      ...state,
+      imageParams: { ...state.imageParams, prompt: 'retry safely' },
+      pendingRequestId: null,
+      status: 'idle',
+    }))
+
+    await useGenerationStore.getState().generateImage()
+    const retained = useGenerationStore.getState().pendingRequestId
+    expect(retained).toMatch(/^[0-9a-f-]{36}$/)
+    await useGenerationStore.getState().generateImage()
+
+    expect(payloads[0]).toEqual(expect.objectContaining({ request_id: retained }))
+    expect(useGenerationStore.getState().pendingRequestId).toBeNull()
   })
 })
 

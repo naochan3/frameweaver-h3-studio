@@ -391,6 +391,70 @@ async fn routed_history_is_sent_only_to_its_owner_and_recorded_worker() {
 }
 
 #[tokio::test]
+async fn routed_websocket_requires_owned_job_and_uses_its_worker() {
+    let (upstream_url, upstream_server) =
+        start_server(Router::new().route("/ws", get(echo_socket))).await;
+    let repository = JobRepository::open(
+        std::env::temp_dir().join(format!("frameweaver-proxy-ws-{}.db", Uuid::new_v4())),
+    )
+    .await
+    .unwrap();
+    let owner = Uuid::new_v4().to_string();
+    let job = repository
+        .create_routed(
+            NewJob {
+                owner_id: owner.clone(),
+                kind: "image".into(),
+                mode: "txt2img".into(),
+                prompt: "safe".into(),
+                settings_json: "{}".into(),
+            },
+            Some("rtx4090"),
+        )
+        .await
+        .unwrap();
+    let comfy = ComfyApi::new(upstream_url.parse().unwrap()).unwrap();
+    let (base_url, proxy_server) = start_server(build_proxy_router(
+        ProxyConfig::new(
+            "http://127.0.0.1:9".parse().unwrap(),
+            Duration::from_secs(1),
+        )
+        .with_job_routing(repository, WorkerRegistry::local(comfy)),
+    ))
+    .await;
+    let ws_base = base_url.replacen("http", "ws", 1);
+    let (mut socket, _) = tokio_tungstenite::connect_async(format!(
+        "{ws_base}/comfy/ws?clientId={}&prompt_id={}&owner={owner}",
+        Uuid::new_v4(),
+        job.id
+    ))
+    .await
+    .unwrap();
+    socket
+        .send(tokio_tungstenite::tungstenite::Message::Text(
+            "worker-bound".into(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        socket.next().await.unwrap().unwrap().into_text().unwrap(),
+        "worker-bound"
+    );
+    assert!(
+        tokio_tungstenite::connect_async(format!(
+            "{ws_base}/comfy/ws?clientId={}&prompt_id={}&owner={}",
+            Uuid::new_v4(),
+            job.id,
+            Uuid::new_v4()
+        ))
+        .await
+        .is_err()
+    );
+    proxy_server.abort();
+    upstream_server.abort();
+}
+
+#[tokio::test]
 async fn proxy_blocks_mutating_comfy_routes_without_contacting_upstream() {
     let record = UpstreamRecord::default();
     let upstream = Router::new()
