@@ -22,8 +22,9 @@ use frameweaverd::{
     comfy::ComfyApi,
     jobs::{
         JobRepository, JobStatus, NewJob,
-        api::{build_router, reconcile_incomplete},
+        api::{build_routed_router, build_router, reconcile_incomplete},
     },
+    workers::{WorkerCapability, WorkerId, WorkerRegistry, WorkerSnapshot},
 };
 use serde_json::{Value, json};
 use tokio::{
@@ -40,6 +41,7 @@ struct MockComfyState {
     cancelled: Arc<Mutex<Vec<String>>>,
     job_responses: Arc<Mutex<HashMap<String, MockJobResponse>>>,
     reject_submissions: Arc<AtomicBool>,
+    reconcile_after_submit: Arc<AtomicBool>,
     cancel_responses: Arc<Mutex<Vec<MockCancelResponse>>>,
     unexpected_paths: Arc<Mutex<Vec<String>>>,
     hold_gets: Arc<AtomicBool>,
@@ -159,15 +161,26 @@ async fn get_job(
     if delay_ms > 0 {
         sleep(Duration::from_millis(delay_ms)).await;
     }
-    let response = match state.job_responses.lock().unwrap().get(&id) {
-        Some(MockJobResponse::Status(status)) => {
-            (StatusCode::OK, Json(json!({"status": status}))).into_response()
+    let response = if state.reconcile_after_submit.load(Ordering::SeqCst)
+        && state
+            .prompt_ids
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|submitted| submitted == &id)
+    {
+        (StatusCode::OK, Json(json!({"status": "in_progress"}))).into_response()
+    } else {
+        match state.job_responses.lock().unwrap().get(&id) {
+            Some(MockJobResponse::Status(status)) => {
+                (StatusCode::OK, Json(json!({"status": status}))).into_response()
+            }
+            Some(MockJobResponse::Payload(payload)) => {
+                (StatusCode::OK, Json(payload.clone())).into_response()
+            }
+            Some(MockJobResponse::ServerError) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+            None => StatusCode::NOT_FOUND.into_response(),
         }
-        Some(MockJobResponse::Payload(payload)) => {
-            (StatusCode::OK, Json(payload.clone())).into_response()
-        }
-        Some(MockJobResponse::ServerError) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-        None => StatusCode::NOT_FOUND.into_response(),
     };
     state.active_gets.fetch_sub(1, Ordering::SeqCst);
     response
@@ -220,6 +233,20 @@ async fn api_server(
     (format!("http://{address}"), repository, server)
 }
 
+async fn routed_api_server(
+    repository: JobRepository,
+    workers: WorkerRegistry,
+) -> (String, tokio::task::JoinHandle<()>) {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+        axum::serve(listener, build_routed_router(repository, workers))
+            .await
+            .unwrap()
+    });
+    (format!("http://{address}"), server)
+}
+
 fn job_request() -> Value {
     json!({
         "client_id": Uuid::new_v4().to_string(),
@@ -256,6 +283,79 @@ async fn jobs_api_response_loss_retry_returns_original_job_and_submits_once() {
     assert_eq!(first.status(), StatusCode::CREATED);
     assert_eq!(second.status(), StatusCode::OK);
     assert_eq!(comfy_state.prompt_ids.lock().unwrap().len(), 1);
+    api_server.abort();
+    comfy_server.abort();
+}
+
+#[tokio::test]
+async fn replay_returns_existing_job_before_offline_worker_selection() {
+    let (comfy_address, _state, comfy_server) = mock_comfy().await;
+    let (first_url, repository, first_server) = api_server(comfy_address).await;
+    let owner = owner();
+    let mut request = job_request();
+    request["request_id"] = Value::String(Uuid::new_v4().to_string());
+    let client = reqwest::Client::new();
+    assert_eq!(
+        client
+            .post(format!("{first_url}/api/jobs"))
+            .header("X-FrameWeaver-Owner", &owner)
+            .json(&request)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CREATED
+    );
+    first_server.abort();
+    let offline = WorkerRegistry::new(vec![(
+        WorkerSnapshot {
+            id: WorkerId::new("rtx4090").unwrap(),
+            label: "offline".into(),
+            capabilities: vec![WorkerCapability::Image],
+            online: false,
+            stale: true,
+            free_vram_mb: 0,
+            queue_depth: 0,
+        },
+        ComfyApi::new(format!("http://{comfy_address}").parse().unwrap()).unwrap(),
+    )])
+    .unwrap();
+    let (retry_url, retry_server) = routed_api_server(repository, offline).await;
+    assert_eq!(
+        client
+            .post(format!("{retry_url}/api/jobs"))
+            .header("X-FrameWeaver-Owner", &owner)
+            .json(&request)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK
+    );
+    retry_server.abort();
+    comfy_server.abort();
+}
+
+#[tokio::test]
+async fn submit_transport_failure_reconciles_existing_upstream_job() {
+    let (comfy_address, state, comfy_server) = mock_comfy().await;
+    state.reject_submissions.store(true, Ordering::SeqCst);
+    state.reconcile_after_submit.store(true, Ordering::SeqCst);
+    let (api_url, repository, api_server) = api_server(comfy_address).await;
+    let owner = owner();
+    let client = reqwest::Client::new();
+    let response = client
+        .post(format!("{api_url}/api/jobs"))
+        .header("X-FrameWeaver-Owner", &owner)
+        .json(&job_request())
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::ACCEPTED);
+    assert_eq!(
+        repository.list_for_owner(&owner, 10).await.unwrap()[0].status,
+        JobStatus::Running
+    );
     api_server.abort();
     comfy_server.abort();
 }
