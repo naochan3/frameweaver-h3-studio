@@ -1,4 +1,5 @@
 import { client, useGenerationStore } from '../store/generation'
+import { ThemePicker } from './ThemePicker'
 
 function formatGb(bytes: number): string {
   return (bytes / 1024 ** 3).toFixed(1)
@@ -6,36 +7,53 @@ function formatGb(bytes: number): string {
 
 export function Header() {
   const connected = useGenerationStore((s) => s.connected)
+  const wsConnected = useGenerationStore((s) => s.wsConnected)
   const vram = useGenerationStore((s) => s.vram)
   const queueRemaining = useGenerationStore((s) => s.queueRemaining)
   const stop = useGenerationStore((s) => s.stop)
+  const refreshCapability = useGenerationStore((s) => s.refreshCapability)
   const setGuideOpen = useGenerationStore((s) => s.setGuideOpen)
 
   const vramUsed = vram ? vram.total - vram.free : 0
   const vramPct = vram && vram.total > 0 ? Math.min(100, (vramUsed / vram.total) * 100) : 0
+  const connectionLabel = !connected ? '未接続' : wsConnected ? '接続済み' : 'APIのみ'
+  const connectionDot = !connected ? 'bg-red-400' : wsConnected ? 'bg-green-500' : 'bg-amber-400'
 
   return (
-    <header className="flex flex-wrap items-center gap-2 border-b border-cream-200 bg-white px-3 py-3 sm:gap-4 sm:px-5">
-      <div className="flex min-w-0 items-center gap-2">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent-500 font-bold text-white">F</span>
-        <h1 className="text-sm font-bold tracking-tight sm:text-lg">FrameWeaver H3 Studio</h1>
+    <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-cream-200 bg-surface px-3 py-2 sm:gap-4 sm:px-5 sm:py-3">
+      <div className="flex items-center gap-2">
+        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-500 font-bold text-white sm:h-8 sm:w-8">F</span>
+        <h1 className="text-base font-bold tracking-tight sm:text-lg">FrameWeaver H3 Studio</h1>
       </div>
 
-      <div className="flex items-center gap-1.5 rounded-full bg-cream-100 px-3 py-1 text-xs text-ink-600">
-        <span className={`h-2 w-2 rounded-full ${connected ? 'bg-green-500' : 'bg-red-400'}`} />
-        {connected ? 'ComfyUI 接続済み' : 'ComfyUI 未接続'}
+      <div className="flex items-center gap-1.5 rounded-full bg-cream-100 px-2.5 py-1 text-xs text-ink-600">
+        <span className={`h-2 w-2 rounded-full ${connectionDot}`} />
+        <span className="hidden sm:inline">ComfyUI {connectionLabel}</span>
+        <span className="sm:hidden">{connectionLabel}</span>
         {queueRemaining > 0 && <span className="ml-1 font-semibold text-accent-600">キュー {queueRemaining}</span>}
       </div>
 
-      <div className="flex w-full flex-wrap items-center gap-2 xl:ml-auto xl:w-auto xl:gap-3">
-        <div className="flex items-center gap-2 rounded-lg border border-cream-200 px-3 py-1.5">
-          <span className="text-[10px] font-bold tracking-wider text-ink-400">COMFY使用</span>
-          <div className="hidden h-1.5 w-24 overflow-hidden rounded-full bg-cream-200 sm:block">
+      <ThemePicker />
+
+      {/* 操作系: モバイルでは折り返して2段目に並ぶ。横スクロールは発生させない */}
+      <div className="flex w-full items-center gap-2 sm:ml-auto sm:w-auto sm:gap-3">
+        <div className="flex items-center gap-2 rounded-lg border border-cream-200 px-2.5 py-1.5">
+          <span className="text-[10px] font-bold tracking-wider text-ink-400">VRAM</span>
+          <div className="h-1.5 w-16 overflow-hidden rounded-full bg-cream-200 sm:w-24">
             <div className="h-full rounded-full bg-accent-500 transition-all" style={{ width: `${vramPct}%` }} />
           </div>
           <span className="text-xs tabular-nums text-ink-600">
             {vram ? `${formatGb(vramUsed)} / ${formatGb(vram.total)} GB` : '--'}
           </span>
+          <button
+            type="button"
+            onClick={() => void refreshCapability()}
+            className="rounded px-1 text-ink-400 hover:bg-cream-100 hover:text-accent-600"
+            title="GPU能力とモデル在庫を再診断"
+            aria-label="GPU能力とモデル在庫を再診断"
+          >
+            ↻
+          </button>
         </div>
         <button
           onClick={() => void stop()}
@@ -45,7 +63,7 @@ export function Header() {
         </button>
         <button
           onClick={() => setGuideOpen(true)}
-          className="rounded-lg border border-accent-400 bg-orange-50 px-3 py-1.5 text-xs font-semibold text-accent-600 hover:bg-orange-100"
+          className="rounded-lg border border-accent-400 bg-accent-50 px-2.5 py-1.5 text-xs font-semibold text-accent-600 hover:bg-accent-200"
         >
           使い方
         </button>

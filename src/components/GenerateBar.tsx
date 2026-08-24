@@ -31,7 +31,7 @@ export function GenerateBar() {
       : 'この内容で画像を生成'
 
   return (
-    <div className="generate-bar fixed inset-x-0 bottom-0 z-30 border-t border-cream-200 bg-white/90 px-4 py-3 backdrop-blur">
+    <div className="generate-bar fixed inset-x-0 bottom-0 z-30 border-t border-cream-200 bg-surface/90 px-4 py-3 backdrop-blur">
       <div className="mx-auto flex max-w-[1600px] items-center gap-4">
         <WorkerSelector />
         <div className="min-w-0 flex-1">

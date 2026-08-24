@@ -7,6 +7,7 @@ interface Worker {
   online: boolean
   stale: boolean
   free_vram_mb: number
+  capabilities: string[]
 }
 
 const order = ['rtx5060ti', 'rtx3070', 'rtx2070', 'rtx4090']
@@ -14,6 +15,7 @@ const order = ['rtx5060ti', 'rtx3070', 'rtx2070', 'rtx4090']
 export function WorkerSelector() {
   const preference = useGenerationStore((state) => state.workerPreference)
   const setPreference = useGenerationStore((state) => state.setWorkerPreference)
+  const appTab = useGenerationStore((state) => state.appTab)
   const [workers, setWorkers] = useState<Worker[]>([])
 
   useEffect(() => {
@@ -42,8 +44,9 @@ export function WorkerSelector() {
       >
         <option value="auto">Auto（推奨）</option>
         {sorted.map((worker) => {
-          const unavailable = !worker.online || worker.stale
-          const detail = unavailable ? 'オフライン' : `空き ${(worker.free_vram_mb / 1024).toFixed(1)} GB`
+          const supported = worker.capabilities.includes(appTab === 'video' ? 'video' : 'image')
+          const unavailable = !worker.online || worker.stale || !supported
+          const detail = !supported ? `${appTab === 'video' ? '動画' : '画像'}非対応` : unavailable ? 'オフライン' : `空き ${(worker.free_vram_mb / 1024).toFixed(1)} GB`
           return <option key={worker.id} value={worker.id} disabled={unavailable}>{worker.label} — {detail}</option>
         })}
       </select>

@@ -7,6 +7,7 @@ const MODE_LABEL: Record<string, string> = {
   first_last: 'First+Last',
   last: 'Last',
   reference: 'Reference',
+  anime: 'アニメ',
   zimage: 'Z-Image',
   krea2: 'Krea 2',
 }
@@ -17,7 +18,7 @@ export function HistoryPanel() {
   const openDetail = useGenerationStore((s) => s.openDetail)
 
   return (
-    <section className="rounded-2xl bg-white p-5 shadow-sm">
+    <section className="rounded-2xl bg-surface p-5 shadow-sm">
       <div className="mb-3 flex items-baseline justify-between">
         <div>
           <p className="text-[10px] font-bold tracking-[0.2em] text-accent-500">RECENT</p>

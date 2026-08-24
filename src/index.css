@@ -4,12 +4,140 @@
   --color-cream-50: #faf7f2;
   --color-cream-100: #f4efe6;
   --color-cream-200: #e9e1d3;
+  --color-cream-300: #d8c9b7;
+  --color-accent-50: #fff7ed;
+  --color-accent-200: #fed7aa;
+  --color-accent-300: #fdba74;
   --color-accent-400: #f59e5b;
   --color-accent-500: #ef8236;
   --color-accent-600: #e06d1f;
   --color-ink-900: #2b2420;
+  --color-ink-700: #4b4038;
   --color-ink-600: #6b5f55;
+  --color-ink-500: #817468;
   --color-ink-400: #a39588;
+  /* パネル/カードの面色(旧 bg-white)。ダークで暗色に差し替わる */
+  --color-surface: #ffffff;
+  /* 濃色のソリッドボタン/アクティブタブ用(白文字が乗る前提)。両テーマで暗めを保つ */
+  --color-onsurface: #2b2420;
+}
+
+/* ダークモードの色上書き(温かみのある暗色)。
+   セマンティックな cream/ink/surface と一部の淡色tintを差し替えるだけで全体が反転する。
+   data-theme 未指定はOS設定(prefers-color-scheme)に追従、手動トグルは data-theme が優先。 */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --color-cream-50: #15120e;
+    --color-cream-100: #1e1a14;
+    --color-cream-200: #2e2820;
+    --color-ink-900: #ece5db;
+    --color-ink-600: #b3a89b;
+    --color-ink-400: #8a7f71;
+    --color-surface: #221d16;
+    --color-orange-50: #2b2013;
+    --color-orange-100: #3a2a17;
+    --color-red-50: #2a1512;
+    --color-red-100: #391a16;
+    --color-pink-50: #2a1520;
+    --color-pink-100: #391a29;
+    --color-amber-50: #2a2011;
+    --color-onsurface: #3a332a;
+  }
+}
+:root[data-theme='dark'] {
+  --color-cream-50: #15120e;
+  --color-cream-100: #1e1a14;
+  --color-cream-200: #2e2820;
+  --color-ink-900: #ece5db;
+  --color-ink-600: #b3a89b;
+  --color-ink-400: #8a7f71;
+  --color-surface: #221d16;
+  --color-orange-50: #2b2013;
+  --color-orange-100: #3a2a17;
+  --color-red-50: #2a1512;
+  --color-red-100: #391a16;
+  --color-pink-50: #2a1520;
+  --color-pink-100: #391a29;
+  --color-amber-50: #2a2011;
+  --color-onsurface: #3a332a;
+}
+
+html[data-color-theme='ocean'] {
+  --color-cream-50: #f5fafc;
+  --color-cream-100: #eaf4f7;
+  --color-cream-200: #d5e8ed;
+  --color-cream-300: #b8d4dc;
+  --color-accent-50: #ecfeff;
+  --color-accent-200: #a5f3fc;
+  --color-accent-300: #67e8f9;
+  --color-accent-400: #22d3ee;
+  --color-accent-500: #0e7490;
+  --color-accent-600: #155e75;
+  --color-ink-400: #7b939d;
+  --color-ink-500: #5c7580;
+  --color-ink-600: #455f6b;
+  --color-ink-700: #304750;
+  --color-ink-900: #172b33;
+}
+
+html[data-color-theme='violet'] {
+  --color-cream-50: #faf7fc;
+  --color-cream-100: #f4edf8;
+  --color-cream-200: #e8dcf0;
+  --color-cream-300: #d4c0e2;
+  --color-accent-50: #faf5ff;
+  --color-accent-200: #e9d5ff;
+  --color-accent-300: #d8b4fe;
+  --color-accent-400: #c084fc;
+  --color-accent-500: #9333ea;
+  --color-accent-600: #7e22ce;
+  --color-ink-400: #9a8ba5;
+  --color-ink-500: #776685;
+  --color-ink-600: #62536f;
+  --color-ink-700: #493b55;
+  --color-ink-900: #2b2132;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light'])[data-color-theme='ocean'] {
+    --color-cream-50: #0d1b1f;
+    --color-cream-100: #13292f;
+    --color-cream-200: #1b3c45;
+    --color-ink-900: #d9f0f4;
+    --color-ink-600: #acc8ce;
+    --color-ink-400: #7b9ba3;
+    --color-surface: #112329;
+  }
+
+  :root:not([data-theme='light'])[data-color-theme='violet'] {
+    --color-cream-50: #1a1421;
+    --color-cream-100: #261d31;
+    --color-cream-200: #38284a;
+    --color-ink-900: #f0e5f7;
+    --color-ink-600: #c7b2d4;
+    --color-ink-400: #947ba5;
+    --color-surface: #21172b;
+  }
+}
+
+:root[data-theme='dark'][data-color-theme='ocean'] {
+  --color-cream-50: #0d1b1f;
+  --color-cream-100: #13292f;
+  --color-cream-200: #1b3c45;
+  --color-ink-900: #d9f0f4;
+  --color-ink-600: #acc8ce;
+  --color-ink-400: #7b9ba3;
+  --color-surface: #112329;
+}
+
+:root[data-theme='dark'][data-color-theme='violet'] {
+  --color-cream-50: #1a1421;
+  --color-cream-100: #261d31;
+  --color-cream-200: #38284a;
+  --color-ink-900: #f0e5f7;
+  --color-ink-600: #c7b2d4;
+  --color-ink-400: #947ba5;
+  --color-surface: #21172b;
 }
 
 body {
@@ -27,6 +155,14 @@ body {
 
 .generate-bar {
   min-height: var(--generate-bar-height);
+}
+
+.scrollbar-none {
+  scrollbar-width: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
 }
 
 /* 使い方ガイドのアニメーション */

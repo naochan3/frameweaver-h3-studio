@@ -210,6 +210,7 @@ unsafe fn nvml_windows() -> Result<GpuMetrics, String> {
     type Memory = unsafe extern "C" fn(*mut c_void, *mut Mem) -> i32;
     type Usage = unsafe extern "C" fn(*mut c_void, *mut Util) -> i32;
     type Number = unsafe extern "C" fn(*mut c_void, *mut u32) -> i32;
+    type Temperature = unsafe extern "C" fn(*mut c_void, u32, *mut u32) -> i32;
     let lib = nvml_handle()? as *mut c_void;
     let sym = |n: &str| -> Result<*mut c_void, String> {
         let n = CString::new(n).map_err(|_| "NVML symbol invalid".to_owned())?;
@@ -225,7 +226,7 @@ unsafe fn nvml_windows() -> Result<GpuMetrics, String> {
     let util: Usage = unsafe { std::mem::transmute(sym("nvmlDeviceGetUtilizationRates")?) };
     let power: Number = unsafe { std::mem::transmute(sym("nvmlDeviceGetPowerUsage")?) };
     let limit: Number = unsafe { std::mem::transmute(sym("nvmlDeviceGetEnforcedPowerLimit")?) };
-    let temp: Number = unsafe { std::mem::transmute(sym("nvmlDeviceGetTemperature")?) };
+    let temp: Temperature = unsafe { std::mem::transmute(sym("nvmlDeviceGetTemperature")?) };
     let pstate: Number = unsafe { std::mem::transmute(sym("nvmlDeviceGetPowerState")?) };
     let mut device = std::ptr::null_mut();
     if unsafe { dev(0, &mut device) } != 0 {
@@ -247,7 +248,7 @@ unsafe fn nvml_windows() -> Result<GpuMetrics, String> {
         || unsafe { util(device, &mut u) } != 0
         || unsafe { power(device, &mut p) } != 0
         || unsafe { limit(device, &mut l) } != 0
-        || unsafe { temp(device, &mut t) } != 0
+        || unsafe { temp(device, 0, &mut t) } != 0
         || unsafe { pstate(device, &mut s) } != 0
     {
         return Err("NVML query failed".into());

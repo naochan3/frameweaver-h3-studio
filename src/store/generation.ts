@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import { ComfyClient, type HistoryOutput } from '../lib/comfy-client'
-import { frameWeaverApi, takeLegacyHistory, type FrameWeaverJob } from '../lib/frameweaver-api'
+import { clearLegacyHistory, frameWeaverApi, takeLegacyHistory, type FrameWeaverJob } from '../lib/frameweaver-api'
+import { DRAFT_KEYS, loadDraft, saveDraft } from '../lib/draft'
+import { createAdaptivePoller, pollDelay } from '../lib/adaptive-poller'
 import { buildImageWorkflow } from '../lib/image-workflow'
 import { classifyLora } from '../lib/lora'
 import { imageRecommendedParams, videoRecommendedParams } from '../lib/presets'
@@ -15,6 +17,7 @@ import {
   translatePromptToJa,
 } from '../lib/rewriter'
 import { patchWorkflow } from '../lib/workflow-patcher'
+import type { NodeCapabilitySnapshot } from '../lib/model-capability'
 import type { GenerationMode, GenerationParams, ImageModel, ImageParams, LoraMetaMap } from '../lib/types'
 
 // 既定は同一オリジンの /comfy(Viteプロキシ経由)。これによりPCでもLAN内の別端末でも
@@ -49,6 +52,7 @@ export interface HistoryItem {
     // 動画のみ
     lengthSec?: number
     turbo?: boolean
+    nsfw?: boolean
     durationSec?: number
     cfg?: number
     negativePrompt?: string
@@ -60,9 +64,13 @@ export type GenerationStatus = 'idle' | 'uploading' | 'queued' | 'running' | 'do
 interface GenerationState {
   workerPreference: WorkerPreference
   setWorkerPreference: (preference: WorkerPreference) => void
+  /** ComfyUI REST APIが応答しているか */
   connected: boolean
+  /** 生成進捗・完了通知を受け取るWebSocketが接続中か */
+  wsConnected: boolean
   queueRemaining: number
   vram: { total: number; free: number } | null
+  capability: NodeCapabilitySnapshot | null
   /** ComfyUI 上で選択可能な LoRA 一覧(追加LoRAの候補表示用) */
   loraList: string[]
   checkpointList: string[]
@@ -133,6 +141,9 @@ interface GenerationState {
   setGuideOpen: (open: boolean) => void
   setLoraCatalogOpen: (open: boolean) => void
   refreshLoraMeta: () => Promise<void>
+  /** GPU・モデル在庫をComfyUIから再取得する */
+  refreshCapability: () => Promise<void>
+  /** カタログからLoRAを選択: 対象モデルへ自動切替し、追加LoRAに設定する */
   applyLoraFromCatalog: (metaKey: string) => void
   setAppTab: (tab: 'video' | 'image') => void
   setImageParams: (patch: Partial<ImageParams>) => void
@@ -195,7 +206,7 @@ export function historyFromJob(job: FrameWeaverJob): HistoryItem {
     kind: job.kind,
     mode: job.mode,
     prompt: job.prompt,
-    nsfw: false,
+    nsfw: job.kind === 'video' && settings?.nsfw === true,
     videoUrl: output ? client.viewUrl(output) : '',
     filename: output?.filename ?? job.id,
     createdAt: job.created_at,
@@ -218,11 +229,13 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
   workerPreference: { mode: 'auto' },
   setWorkerPreference: (workerPreference) => set({ workerPreference }),
   connected: false,
+  wsConnected: false,
   queueRemaining: 0,
   vram: null,
+  capability: null,
   params: {
     mode: 'text',
-    prompt: '',
+    prompt: loadDraft(localStorage, DRAFT_KEYS.videoPrompt),
     nsfw: false,
     images: [],
     turbo: true,
@@ -252,7 +265,7 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
   appTab: 'video',
   imageParams: {
     model: 'zimage',
-    prompt: '',
+    prompt: loadDraft(localStorage, DRAFT_KEYS.imagePrompt),
     width: 864,
     height: 1536,
     steps: 8,
@@ -440,6 +453,21 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
     set({ loraMeta, loraList })
   },
 
+  refreshCapability: async () => {
+    const capability = await client.capabilities()
+    const primary = capability.devices.reduce<(typeof capability.devices)[number] | null>(
+      (best, device) => !best || device.vramTotal > best.vramTotal ? device : best,
+      null,
+    )
+    set({
+      capability,
+      connected: capability.status === 'ready' || capability.status === 'degraded',
+      ...(primary ? { vram: { total: primary.vramTotal, free: primary.vramFree } } : {}),
+      checkpointList: capability.inventory.checkpoints,
+      loraList: capability.inventory.loras,
+    })
+  },
+
   applyLoraFromCatalog: (metaKey) => {
     const comfyName = get().loraList.find((name) => name.replace(/\\/g, '/') === metaKey) ?? metaKey
     const target = classifyLora(metaKey).target
@@ -469,7 +497,7 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
   setImageParams: (patch) => set((s) => ({ imageParams: { ...s.imageParams, ...patch } })),
 
   setImageModel: (model) => {
-    set((s) => ({ imageParams: { ...s.imageParams, ...imageRecommendedParams(model) } }))
+    set((s) => ({ imageParams: { ...s.imageParams, ...imageRecommendedParams(model) }, imageRewriterAvailable: false }))
     void imageRewriterInstalled(model).then((ok) => {
       if (get().imageParams.model === model) set({ imageRewriterAvailable: ok })
     })
@@ -598,7 +626,7 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
         imageSeedRandom: s ? false : state.imageSeedRandom,
         imageParams: {
           ...state.imageParams,
-          model: item.mode === 'krea2' ? 'krea2' : 'zimage',
+          model: item.mode === 'krea2' || item.mode === 'anime' ? item.mode : 'zimage',
           prompt: item.prompt,
           ...(s && {
             width: s.width,
@@ -607,6 +635,8 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
             seed: s.seed,
             extraLora: s.extraLora ?? '',
             extraLoraStrength: s.extraLoraStrength ?? 1.0,
+            cfg: s.cfg ?? state.imageParams.cfg,
+            negativePrompt: s.negativePrompt ?? state.imageParams.negativePrompt,
           }),
         },
       }))
@@ -674,8 +704,12 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
     const { currentPromptId } = get()
     if (!currentPromptId) return
     try {
-      await frameWeaverApi.cancelJob(currentPromptId)
-      set({ status: 'idle', progress: null, currentPromptId: null })
+      const job = await frameWeaverApi.cancelJob(currentPromptId)
+      if (job.status === 'cancelled') {
+        set({ status: 'idle', progress: null, currentPromptId: null })
+      } else {
+        set({ status: job.status === 'queued' ? 'queued' : 'running', progress: null })
+      }
     } catch (error) {
       set({ error: error instanceof Error ? error.message : String(error) })
     }
@@ -740,9 +774,8 @@ client.onEvent((ev) => {
   switch (ev.type) {
     case 'status':
       if (ev.message === 'connected') {
-        useGenerationStore.setState({ connected: true })
-        void client.getLoraList().then((loraList) => useGenerationStore.setState({ loraList }))
-        void client.getCheckpointList().then((checkpointList) => useGenerationStore.setState({ checkpointList }))
+        useGenerationStore.setState({ wsConnected: true })
+        void useGenerationStore.getState().refreshCapability()
         void client.getLoraMeta().then((loraMeta) => useGenerationStore.setState({ loraMeta }))
         void rewriterInstalled().then((ok) => useGenerationStore.setState({ rewriterAvailable: ok }))
         const imageModel = useGenerationStore.getState().imageParams.model
@@ -752,7 +785,7 @@ client.onEvent((ev) => {
           }
         })
       }
-      if (ev.message === 'disconnected') useGenerationStore.setState({ connected: false })
+      if (ev.message === 'disconnected') useGenerationStore.setState({ wsConnected: false })
       if (ev.queueRemaining !== undefined) useGenerationStore.setState({ queueRemaining: ev.queueRemaining })
       break
     case 'progress':
@@ -786,8 +819,66 @@ client.onEvent((ev) => {
 
 client.connect()
 
+// プロンプト下書きの永続化(リロードしても消えないように変更のたび保存)
+useGenerationStore.subscribe((s, prev) => {
+  if (s.params.prompt !== prev.params.prompt) {
+    saveDraft(localStorage, DRAFT_KEYS.videoPrompt, s.params.prompt)
+  }
+  if (s.imageParams.prompt !== prev.imageParams.prompt) {
+    saveDraft(localStorage, DRAFT_KEYS.imagePrompt, s.imageParams.prompt)
+  }
+})
+
+// プロンプト下書きの永続化(リロードしても消えないように変更のたび保存)
+useGenerationStore.subscribe((s, prev) => {
+  if (s.params.prompt !== prev.params.prompt) {
+    saveDraft(localStorage, DRAFT_KEYS.videoPrompt, s.params.prompt)
+  }
+  if (s.imageParams.prompt !== prev.imageParams.prompt) {
+    saveDraft(localStorage, DRAFT_KEYS.imagePrompt, s.imageParams.prompt)
+  }
+})
+
+// VRAMだけを軽量監視。モデル在庫は接続時または手動更新時に取得する。
+const vramPoller = createAdaptivePoller({
+  poll: async () => {
+    const stats = await client.systemStats()
+    if (stats) {
+      useGenerationStore.setState((state) => ({
+        vram: { total: stats.vramTotal, free: stats.vramFree },
+        connected: true,
+        capability: state.capability
+          ? {
+              ...state.capability,
+              capturedAt: new Date().toISOString(),
+              status: state.capability.errors.length > 0 ? 'degraded' : 'ready',
+              devices: state.capability.devices.length > 0
+                ? state.capability.devices.map((device, index) => index === 0
+                    ? { ...device, vramTotal: stats.vramTotal, vramFree: stats.vramFree }
+                    : device)
+                : state.capability.devices,
+            }
+          : null,
+      }))
+      return
+    }
+    useGenerationStore.setState((state) => ({
+      connected: false,
+      capability: state.capability ? { ...state.capability, status: 'stale' } : null,
+    }))
+  },
+  delay: () => pollDelay(
+    useGenerationStore.getState().status,
+    typeof document === 'undefined' ? 'visible' : document.visibilityState,
+  ),
+})
+vramPoller.start()
+
 void frameWeaverApi.listJobs()
-  .then((jobs) => useGenerationStore.setState({ history: jobs.map(historyFromJob) }))
+  .then((jobs) => {
+    clearLegacyHistory()
+    useGenerationStore.setState({ history: jobs.map(historyFromJob) })
+  })
   .catch(() => {
     // API が一時的に利用できない間だけ、初期化時に読んだ旧履歴を表示し続ける。
   })

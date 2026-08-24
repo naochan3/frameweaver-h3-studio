@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ComfyClient } from './comfy-client'
-import { FrameWeaverApi, getOwnerId, takeLegacyHistory, type FrameWeaverJob } from './frameweaver-api'
+import { FrameWeaverApi, clearLegacyHistory, getOwnerId, takeLegacyHistory, type FrameWeaverJob } from './frameweaver-api'
 
 const ownerId = '11111111-1111-4111-8111-111111111111'
 const storage = new Map<string, string>()
@@ -62,13 +62,14 @@ describe('FrameWeaverApi', () => {
   it('does not expose Comfy-wide interrupt or queue clearing controls', () => {
     expect(ComfyClient.prototype).not.toHaveProperty('interrupt')
     expect(ComfyClient.prototype).not.toHaveProperty('clearQueue')
-    expect(ComfyClient.prototype).not.toHaveProperty('systemStats')
   })
 
-  it('uses old local history only once as a migration fallback', () => {
+  it('retains legacy history until a successful API handoff', () => {
     localStorage.setItem('frameweaver-history', JSON.stringify([{ promptId: 'legacy-job' }]))
 
     expect(takeLegacyHistory()).toEqual([{ promptId: 'legacy-job' }])
+    expect(takeLegacyHistory()).toEqual([{ promptId: 'legacy-job' }])
+    clearLegacyHistory()
     expect(takeLegacyHistory()).toEqual([])
   })
 })

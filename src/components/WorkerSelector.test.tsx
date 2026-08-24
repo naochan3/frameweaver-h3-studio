@@ -6,7 +6,7 @@ import { WorkerSelector } from './WorkerSelector'
 import { useGenerationStore } from '../store/generation'
 
 describe('WorkerSelector', () => {
-  beforeEach(() => useGenerationStore.setState({ workerPreference: { mode: 'auto' } }))
+  beforeEach(() => useGenerationStore.setState({ workerPreference: { mode: 'auto' }, appTab: 'image' }))
   it('renders Auto and the stable fleet order with unavailable reasons', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ workers: [
       { id: 'rtx4090', label: 'RTX 4090', capabilities: ['image'], online: true, stale: false, free_vram_mb: 20000, queue_depth: 0 },
@@ -17,6 +17,17 @@ describe('WorkerSelector', () => {
     expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual([
       'Auto（推奨）', 'RTX 5060 Ti — オフライン', 'RTX 4090 — 空き 19.5 GB',
     ])
+    vi.unstubAllGlobals()
+  })
+
+  it('disables an online worker that cannot run the selected job type', async () => {
+    useGenerationStore.setState({ appTab: 'video' })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ workers: [
+      { id: 'rtx3070', label: 'RTX 3070', capabilities: ['image'], online: true, stale: false, free_vram_mb: 7000, queue_depth: 0 },
+    ] })))
+    render(<WorkerSelector />)
+
+    await waitFor(() => expect(screen.getByRole('option', { name: /RTX 3070.*動画非対応/ })).toBeDisabled())
     vi.unstubAllGlobals()
   })
 })

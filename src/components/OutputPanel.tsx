@@ -28,7 +28,7 @@ export function OutputPanel() {
     : null
 
   return (
-    <section className="rounded-2xl bg-white p-5 shadow-sm">
+    <section className="rounded-2xl bg-surface p-5 shadow-sm">
       <div className="mb-3 flex items-baseline justify-between">
         <div>
           <p className="text-[10px] font-bold tracking-[0.2em] text-accent-500">OUTPUT</p>
@@ -41,7 +41,7 @@ export function OutputPanel() {
             {resultKind === 'image' && (
               <button
                 onClick={() => void sendImageToSource(videoUrl)}
-                className="rounded-lg bg-ink-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-ink-600"
+                className="rounded-lg bg-onsurface px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90"
                 title="この画像を動画生成の参照素材(SOURCE)に送る"
               >
                 動画の素材にする →

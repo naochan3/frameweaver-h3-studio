@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig, type ProxyOptions } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { discordAuthPlugin } from './server/discord-auth.js'
@@ -8,7 +8,18 @@ import { createViteRewriterMiddleware } from './src/server/vite-rewriter-middlew
 // ComfyUI バックエンド(PC上の localhost:8188)。
 // 同一LAN内の別端末(スマホ等)からアクセスするため、ブラウザは直接叩かず
 // Vite の /comfy プロキシ経由でPC上のComfyUIへ中継する(CORS不要・127.0.0.1問題を回避)。
-const COMFY_TARGET = 'http://127.0.0.1:8188'
+const COMFY_TARGET = process.env.COMFY_TARGET ?? 'http://127.0.0.1:8189'
+const comfyProxy: Record<string, string | ProxyOptions> = {
+  '/comfy': {
+    target: COMFY_TARGET,
+    changeOrigin: true,
+    ws: true,
+    // ComfyUIはWebSocketのOriginを検査する。外部のTailnetホスト名や任意の
+    // Vite開発ポートをそのまま渡すと403になるため、同一上流Originへ正規化する。
+    headers: { origin: new URL(COMFY_TARGET).origin },
+    rewrite: (path) => path.replace(/^\/comfy/, ''),
+  },
+}
 const rewriterMiddleware = createViteRewriterMiddleware(createRewriterGateway())
 const rewriterPlugin = {
   name: 'frameweaver-rewriter-gateway',
@@ -28,25 +39,16 @@ export default defineConfig({
     strictPort: true,
     allowedHosts: ['rtx4090.tail37947a.ts.net'],
     proxy: {
-      '/api/fleet': {
+      '/api': {
         target: process.env.FRAMEWEAVER_API_URL ?? 'http://127.0.0.1:5181',
         changeOrigin: true,
       },
-      '/comfy': {
-        target: COMFY_TARGET,
-        changeOrigin: true,
-        ws: true,
-        rewrite: (p) => p.replace(/^\/comfy/, ''),
-        configure: (proxy) => {
-          // ComfyUIがloopback時に行うHost/Origin照合を、同一ホストのプロキシ要求として通す。
-          proxy.on('proxyReq', (request) => request.setHeader('origin', COMFY_TARGET))
-          proxy.on('proxyReqWs', (request) => request.setHeader('origin', COMFY_TARGET))
-        },
-      },
+      ...comfyProxy,
     },
   },
   preview: {
     host: '127.0.0.1',
     port: 5180,
+    proxy: comfyProxy,
   },
 })

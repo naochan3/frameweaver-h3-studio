@@ -55,9 +55,11 @@ export function takeLegacyHistory<T = unknown>(): T[] {
     return Array.isArray(value) ? value as T[] : []
   } catch {
     return []
-  } finally {
-    localStorage.removeItem(LEGACY_HISTORY_STORAGE_KEY)
   }
+}
+
+export function clearLegacyHistory(): void {
+  localStorage.removeItem(LEGACY_HISTORY_STORAGE_KEY)
 }
 
 export class FrameWeaverApi {

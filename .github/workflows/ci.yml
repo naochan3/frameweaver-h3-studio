@@ -30,6 +30,7 @@ jobs:
       - name: Frontend unit, lint, and build
         run: |
           npm test
+          npm run docs:verify
           npm run lint
           npm run build
           npm audit --audit-level=high

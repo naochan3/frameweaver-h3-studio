@@ -6,7 +6,7 @@ REM  1) Ollama (プロンプト強化用LLM, 127.0.0.1:11434)
 REM  2) ComfyUI バックエンド (127.0.0.1:8188)
 REM  3) WebUI (http://localhost:5180)
 REM  4) ブラウザを開く
-REM すべて localhost バインドなのでファイアウォール許可は不要。
+REM ComfyUI/Ollamaはlocalhost限定。WebUIはLAN内端末向けに0.0.0.0で待受。
 REM ============================================================
 
 REM --- Ollama (未起動なら起動。プロンプト自動強化に使用) ---
@@ -15,8 +15,11 @@ powershell -NoProfile -Command "$up=$false; try { $up=((Invoke-WebRequest 'http:
 REM --- ComfyUI バックエンド ---
 start "ComfyUI (port 8188)" powershell -NoProfile -ExecutionPolicy Bypass -File "C:\Users\ogosh\work\shirokuma-openclaw-ops\scripts\Start-ShirokumaComfyUI.ps1"
 
-REM --- WebUI ---
+REM --- FrameWeaver control-plane API ---
 cd /d "%~dp0"
+start "FrameWeaver API (port 5181)" cmd /c "npm run dev:api"
+
+REM --- WebUI ---
 start "FrameWeaver WebUI (port 5180)" cmd /c "npm run dev"
 
 REM --- 起動を待ってブラウザを開く ---

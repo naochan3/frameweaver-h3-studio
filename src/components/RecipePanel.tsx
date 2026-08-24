@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { classifyLora, selectableLoras } from '../lib/lora'
 import { ASPECT_OPTIONS, VIDEO_MP_OPTIONS, computeResolution, type AspectRatio } from '../lib/resolution'
 import { imageSlots, useGenerationStore } from '../store/generation'
+import { rankModels } from '../lib/model-capability'
+import { ModelFitBadge } from './ModelFitBadge'
 
 export function RecipePanel() {
   const params = useGenerationStore((s) => s.params)
@@ -13,10 +15,12 @@ export function RecipePanel() {
   const resetVideoRecommended = useGenerationStore((s) => s.resetVideoRecommended)
   const seedRandom = useGenerationStore((s) => s.videoSeedRandom)
   const toggleSeedRandom = useGenerationStore((s) => s.toggleVideoSeedRandom)
+  const capability = useGenerationStore((s) => s.capability)
 
   const busy = status === 'queued' || status === 'running' || status === 'uploading'
   const [minImages] = imageSlots(params.mode)
   const ready = !busy && params.prompt.trim().length > 0 && sources.length >= minImages
+  const videoFit = capability ? rankModels(capability, 'video')[0] : null
 
   // アスペクト比×画質(MP)の2軸で解像度を決める(実測: 1.3MP超は12GBで非実用)
   const [aspect, setAspect] = useState<AspectRatio>('9:16')
@@ -33,11 +37,14 @@ export function RecipePanel() {
   }
 
   return (
-    <section className="rounded-2xl bg-white p-5 shadow-sm">
+    <section className="rounded-2xl bg-surface p-5 shadow-sm">
       <div className="mb-4 flex items-start justify-between">
         <div>
           <p className="text-[10px] font-bold tracking-[0.2em] text-accent-500">RECIPE</p>
-          <h2 className="text-lg font-bold">仕上がりを選ぶ</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-lg font-bold">仕上がりを選ぶ</h2>
+            {videoFit && <ModelFitBadge fit={videoFit} />}
+          </div>
           <p className="mt-0.5 text-xs text-ink-400">初期値は12GB VRAM向けのおすすめ設定です。</p>
         </div>
         <button
@@ -68,7 +75,7 @@ export function RecipePanel() {
             onChange={(e) => setParams({ nsfw: e.target.checked })}
             className="peer sr-only"
           />
-          <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${params.nsfw ? 'left-[22px]' : 'left-0.5'}`} />
+          <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-surface shadow transition-all ${params.nsfw ? 'left-[22px]' : 'left-0.5'}`} />
         </div>
       </label>
 
@@ -81,7 +88,7 @@ export function RecipePanel() {
                 key={a}
                 onClick={() => applyResolution(a, mp)}
                 className={`flex-1 rounded-lg border px-1 py-2 text-xs font-bold transition-colors ${
-                  aspect === a ? 'border-accent-500 bg-orange-50 text-accent-600' : 'border-cream-200 text-ink-600 hover:border-accent-400'
+                  aspect === a ? 'border-accent-500 bg-accent-50 text-accent-600' : 'border-cream-200 text-ink-600 hover:border-accent-400'
                 }`}
               >
                 {a}
@@ -224,7 +231,7 @@ export function RecipePanel() {
               title={seedRandom ? 'ランダムON(押すと固定に切替)' : 'ランダムOFF(押すと毎回ランダムに切替)'}
             >
               <span className={`relative h-5 w-9 rounded-full transition-colors ${seedRandom ? 'bg-accent-500' : 'bg-cream-200'}`}>
-                <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${seedRandom ? 'left-[18px]' : 'left-0.5'}`} />
+                <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-surface shadow transition-all ${seedRandom ? 'left-[18px]' : 'left-0.5'}`} />
               </span>
               ランダム
             </button>

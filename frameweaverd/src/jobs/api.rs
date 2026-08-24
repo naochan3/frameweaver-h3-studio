@@ -165,12 +165,8 @@ async fn create_job(
         "video" => WorkerCapability::Video,
         _ => WorkerCapability::Image,
     };
-    let required_vram_mb = request
-        .settings
-        .get("required_vram_mb")
-        .and_then(Value::as_u64)
-        .unwrap_or(0)
-        .min(128 * 1024);
+    let required_vram_mb = required_vram_mb(&request.kind, &request.mode)
+        .ok_or_else(|| ApiError::bad_request("invalid job request"))?;
     let worker_id = state
         .workers
         .select(&WorkerRequest {
@@ -223,6 +219,15 @@ async fn create_job(
     Ok((StatusCode::CREATED, Json(job)))
 }
 
+fn required_vram_mb(kind: &str, mode: &str) -> Option<u64> {
+    match kind {
+        "video" if !mode.is_empty() => Some(16 * 1024),
+        "image" if mode == "anime" => Some(12 * 1024),
+        "image" if !mode.is_empty() => Some(10 * 1024),
+        _ => None,
+    }
+}
+
 async fn list_jobs(
     State(state): State<JobsState>,
     owner: OwnerId,
@@ -235,12 +240,13 @@ async fn list_jobs(
         .await
         .map_err(|_| ApiError::internal())?;
     let reconciled = stream::iter(jobs)
-        .map(|job| reconcile_job(&state, job))
+        .map(|job| async {
+            let fallback = job.clone();
+            reconcile_job(&state, job).await.unwrap_or(fallback)
+        })
         .buffered(RECONCILE_CONCURRENCY)
         .collect::<Vec<_>>()
-        .await
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()?;
+        .await;
     Ok(Json(JobListResponse { jobs: reconciled }))
 }
 

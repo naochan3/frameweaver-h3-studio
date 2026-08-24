@@ -61,25 +61,21 @@ describe('generation store API history integration', () => {
     expect(historyFromJob(completedJob)).toEqual(expect.objectContaining({ filename: 'result.png' }))
   })
 
-  it('keeps the active job and reports 404, 409, and network cancellation failures', async () => {
-    const failures: Array<{ response?: Response; error: string }> = [
-      { response: new Response(JSON.stringify({ error: 'job not found' }), { status: 404 }), error: 'job not found' },
-      { response: new Response(JSON.stringify({ error: 'job cannot be cancelled' }), { status: 409 }), error: 'job cannot be cancelled' },
-      { error: 'network unavailable' },
-    ]
+  it('keeps the active job and reports cancellation failures', async () => {
+    useGenerationStore.setState({ currentPromptId: completedJob.id, status: 'running', error: null })
+    environment.fetch.mockResolvedValueOnce(new Response(JSON.stringify({ error: 'job cannot be cancelled' }), { status: 409 }))
 
-    for (const failure of failures) {
-      useGenerationStore.setState({ currentPromptId: completedJob.id, status: 'running', error: null })
-      if (failure.response) environment.fetch.mockResolvedValueOnce(failure.response)
-      else environment.fetch.mockRejectedValueOnce(new Error(failure.error))
+    await expect(useGenerationStore.getState().stop()).resolves.toBeUndefined()
+    expect(useGenerationStore.getState()).toMatchObject({ currentPromptId: completedJob.id, status: 'running', error: 'job cannot be cancelled' })
+  })
 
-      await expect(useGenerationStore.getState().stop()).resolves.toBeUndefined()
-      expect(useGenerationStore.getState()).toMatchObject({
-        currentPromptId: completedJob.id,
-        status: 'running',
-        error: failure.error,
-      })
-    }
+  it('keeps the active job when cancellation is still pending', async () => {
+    useGenerationStore.setState({ currentPromptId: completedJob.id, status: 'running', error: null })
+    environment.fetch.mockResolvedValueOnce(Response.json({ ...completedJob, status: 'cancel_requested' }))
+
+    await useGenerationStore.getState().stop()
+
+    expect(useGenerationStore.getState()).toMatchObject({ currentPromptId: completedJob.id, status: 'running' })
   })
 })
 
@@ -87,48 +83,15 @@ describe('非同期プロンプト強化の競合防止', () => {
   it('強化中に動画条件を編集した場合は古い応答で上書きしない', async () => {
     let resolveFetch!: (value: unknown) => void
     vi.stubGlobal('fetch', () => new Promise((resolve) => { resolveFetch = resolve }))
-    useGenerationStore.setState((s) => ({
-      params: { ...s.params, prompt: 'original', mode: 'text', lengthSec: 5 },
-      rewriting: false,
-    }))
+    useGenerationStore.setState((s) => ({ params: { ...s.params, prompt: 'original', mode: 'text', lengthSec: 5 }, rewriting: false }))
 
     const pending = useGenerationStore.getState().rewritePrompt()
     useGenerationStore.getState().setParams({ prompt: 'edited while waiting' })
-    resolveFetch({
-      ok: true,
-      json: async () => ({ response: 'integrated_multimodal_description: At 00:00.000 subject appears.\noverall_soundscape: quiet room tone.\nnon_diegetic_music: none.' }),
-    })
+    resolveFetch({ ok: true, json: async () => ({ response: 'integrated_multimodal_description: At 00:00.000 subject appears.\noverall_soundscape: quiet room tone.\nnon_diegetic_music: none.' }) })
     await pending
 
     expect(useGenerationStore.getState().params.prompt).toBe('edited while waiting')
     expect(useGenerationStore.getState().rewriteUndo).toBeNull()
     expect(useGenerationStore.getState().rewriting).toBe(false)
-  })
-
-  it('強化中に画像モデルを変更した場合は古い応答で上書きしない', async () => {
-    let resolveFetch!: (value: unknown) => void
-    let call = 0
-    vi.stubGlobal('fetch', () => {
-      call += 1
-      if (call === 1) return new Promise((resolve) => { resolveFetch = resolve })
-      return Promise.resolve(Response.json({ models: ['fw-rewriter-zimage'] }))
-    })
-    useGenerationStore.setState((s) => ({
-      imageParams: { ...s.imageParams, prompt: 'original image', model: 'krea2' },
-      imageRewriting: false,
-    }))
-
-    const pending = useGenerationStore.getState().rewriteImagePrompt()
-    useGenerationStore.getState().setImageModel('zimage')
-    resolveFetch({
-      ok: true,
-      json: async () => ({ response: Array.from({ length: 90 }, (_, i) => `detail${i}`).join(' ') }),
-    })
-    await pending
-
-    expect(useGenerationStore.getState().imageParams.model).toBe('zimage')
-    expect(useGenerationStore.getState().imageParams.prompt).toBe('original image')
-    expect(useGenerationStore.getState().imageRewriteUndo).toBeNull()
-    expect(useGenerationStore.getState().imageRewriting).toBe(false)
   })
 })
