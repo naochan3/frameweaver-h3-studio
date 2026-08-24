@@ -232,7 +232,7 @@ fn job_request() -> Value {
 }
 
 #[tokio::test]
-async fn jobs_api_replay_with_same_request_key_submits_once() {
+async fn jobs_api_response_loss_retry_returns_original_job_and_submits_once() {
     let (comfy_address, comfy_state, comfy_server) = mock_comfy().await;
     let (api_url, _, api_server) = api_server(comfy_address).await;
     let owner = owner();

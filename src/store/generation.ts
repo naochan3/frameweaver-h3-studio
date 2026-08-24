@@ -518,7 +518,8 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
       return
     }
     // ランダムON、または未確定(-1)のときは実シードを採番して履歴に残す
-    if (get().imageSeedRandom || imageParams.seed === -1) {
+    const retryingRequest = get().pendingRequestId !== null
+    if (!retryingRequest && (get().imageSeedRandom || imageParams.seed === -1)) {
       imageParams = { ...imageParams, seed: randomSeed() }
       set({ imageParams })
     }
@@ -679,7 +680,8 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
       set({ status: 'error', error: 'プロンプトを入力してください' })
       return
     }
-    if (get().videoSeedRandom || params.seed === -1) {
+    const retryingRequest = get().pendingRequestId !== null
+    if (!retryingRequest && (get().videoSeedRandom || params.seed === -1)) {
       params = { ...params, seed: randomSeed() }
       set({ params })
     }

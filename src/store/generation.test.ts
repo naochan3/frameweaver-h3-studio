@@ -82,7 +82,11 @@ describe('generation store API history integration', () => {
   it('reuses the request ID after a lost create response', async () => {
     const payloads: unknown[] = []
     environment.fetch
-      .mockRejectedValueOnce(new TypeError('network lost after submit'))
+      .mockImplementationOnce(async (...args: unknown[]) => {
+        const init = args[1] as RequestInit
+        payloads.push(JSON.parse(String(init.body)))
+        throw new TypeError('network lost after submit')
+      })
       .mockImplementationOnce(async (...args: unknown[]) => {
         const init = args[1] as RequestInit
         payloads.push(JSON.parse(String(init.body)))
@@ -100,7 +104,9 @@ describe('generation store API history integration', () => {
     expect(retained).toMatch(/^[0-9a-f-]{36}$/)
     await useGenerationStore.getState().generateImage()
 
+    expect(payloads).toHaveLength(2)
     expect(payloads[0]).toEqual(expect.objectContaining({ request_id: retained }))
+    expect(payloads[1]).toEqual(expect.objectContaining({ request_id: retained, settings: expect.objectContaining({ seed: payloads[0] && (payloads[0] as { settings: { seed: number } }).settings.seed }) }))
     expect(useGenerationStore.getState().pendingRequestId).toBeNull()
   })
 
