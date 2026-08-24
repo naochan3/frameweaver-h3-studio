@@ -18,6 +18,29 @@ pub struct JobRepository {
 }
 
 impl JobRepository {
+    pub async fn get_by_request_key(
+        &self,
+        owner_id: &str,
+        request_key: &str,
+        request_fingerprint: &str,
+    ) -> RepositoryResult<Option<Job>> {
+        let row = sqlx::query(
+            "SELECT id, request_fingerprint FROM jobs WHERE owner_id = ? AND request_key = ?",
+        )
+        .bind(owner_id)
+        .bind(request_key)
+        .fetch_optional(&self.pool)
+        .await?;
+        let Some(row) = row else { return Ok(None) };
+        let existing_fingerprint: Option<String> = row.try_get("request_fingerprint")?;
+        if existing_fingerprint.as_deref() != Some(request_fingerprint) {
+            return Err("request key was reused with a different payload".into());
+        }
+        Ok(Some(
+            self.get_by_id(row.try_get::<String, _>("id")?.as_str())
+                .await?,
+        ))
+    }
     pub async fn open(database_path: impl AsRef<Path>) -> RepositoryResult<Self> {
         let options = SqliteConnectOptions::new()
             .filename(database_path)
@@ -96,20 +119,10 @@ impl JobRepository {
         if result.rows_affected() == 1 {
             return Ok((self.get_by_id(&id).await?, true));
         }
-        let row = sqlx::query(
-            "SELECT id, request_fingerprint FROM jobs WHERE owner_id = ? AND request_key = ?",
-        )
-        .bind(&new_job.owner_id)
-        .bind(request_key)
-        .fetch_one(&self.pool)
-        .await?;
-        let existing_fingerprint: Option<String> = row.try_get("request_fingerprint")?;
-        if existing_fingerprint.as_deref() != Some(request_fingerprint) {
-            return Err("request key was reused with a different payload".into());
-        }
         Ok((
-            self.get_by_id(row.try_get::<String, _>("id")?.as_str())
-                .await?,
+            self.get_by_request_key(&new_job.owner_id, request_key, request_fingerprint)
+                .await?
+                .expect("ignored insert has existing key"),
             false,
         ))
     }

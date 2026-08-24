@@ -178,6 +178,27 @@ async fn create_job(
         .as_ref()
         .map(|_| fingerprint_request(&request));
     let owner_id = owner.0.clone();
+    if let Some(request_id) = request.request_id.as_deref()
+        && let Some(existing) = state
+            .repository
+            .get_by_request_key(
+                &owner_id,
+                request_id,
+                request_fingerprint
+                    .as_deref()
+                    .expect("fingerprint exists with request ID"),
+            )
+            .await
+            .map_err(|error| {
+                if error.to_string() == "request key was reused with a different payload" {
+                    ApiError::idempotency_conflict()
+                } else {
+                    ApiError::internal()
+                }
+            })?
+    {
+        return Ok((StatusCode::OK, Json(existing)));
+    }
     let capability = match request.kind.as_str() {
         "video" => WorkerCapability::Video,
         _ => WorkerCapability::Image,
@@ -240,6 +261,10 @@ async fn create_job(
         .submit(&job.id, &request.client_id, request.workflow)
         .await
     {
+        if let Ok(Some(_)) = comfy.get_job(&job.id).await {
+            let reconciled = reconcile_job(&state, job).await?;
+            return Ok((StatusCode::ACCEPTED, Json(reconciled)));
+        }
         state
             .repository
             .transition(&job.id, JobStatus::Queued, JobStatus::Failed)
