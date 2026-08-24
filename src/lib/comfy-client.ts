@@ -1,4 +1,6 @@
 import type { LoraMetaMap, WorkflowJson } from './types'
+import { collectNodeCapability } from './capability-collector'
+import type { NodeCapabilitySnapshot } from './model-capability'
 
 export interface ProgressEvent {
   type: 'status' | 'progress' | 'executing' | 'executed' | 'error' | 'preview'
@@ -303,7 +305,7 @@ export class ComfyClient {
 
   async systemStats(): Promise<{ vramTotal: number; vramFree: number } | null> {
     try {
-      const res = await fetch(`${this.baseUrl}/system_stats`)
+      const res = await fetch(`${this.baseUrl}/system_stats`, { signal: AbortSignal.timeout(2_000) })
       if (!res.ok) return null
       const json = (await res.json()) as { devices?: Array<{ vram_total?: number; vram_free?: number }> }
       const dev = json.devices?.[0]
@@ -312,5 +314,9 @@ export class ComfyClient {
     } catch {
       return null
     }
+  }
+
+  async capabilities(): Promise<NodeCapabilitySnapshot> {
+    return collectNodeCapability(this.baseUrl)
   }
 }
