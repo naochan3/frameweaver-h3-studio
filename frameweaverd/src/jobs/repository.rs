@@ -71,12 +71,13 @@ impl JobRepository {
         new_job: NewJob,
         worker_id: Option<&str>,
         request_key: &str,
+        request_fingerprint: &str,
     ) -> RepositoryResult<(Job, bool)> {
         let id = Uuid::new_v4().to_string();
         let timestamp = utc_timestamp();
         let result = sqlx::query(
-            "INSERT OR IGNORE INTO jobs (id, owner_id, worker_id, kind, mode, status, prompt, settings_json, request_key, created_at, updated_at) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT OR IGNORE INTO jobs (id, owner_id, worker_id, kind, mode, status, prompt, settings_json, request_key, request_fingerprint, created_at, updated_at) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&id)
         .bind(&new_job.owner_id)
@@ -87,6 +88,7 @@ impl JobRepository {
         .bind(&new_job.prompt)
         .bind(&new_job.settings_json)
         .bind(request_key)
+        .bind(request_fingerprint)
         .bind(&timestamp)
         .bind(&timestamp)
         .execute(&self.pool)
@@ -95,14 +97,21 @@ impl JobRepository {
             return Ok((self.get_by_id(&id).await?, true));
         }
         let row = sqlx::query(
-            "SELECT id, owner_id, worker_id, kind, mode, status, prompt, settings_json, output_json, error, \
-             created_at, updated_at, started_at, finished_at FROM jobs WHERE owner_id = ? AND request_key = ?",
+            "SELECT id, request_fingerprint FROM jobs WHERE owner_id = ? AND request_key = ?",
         )
         .bind(&new_job.owner_id)
         .bind(request_key)
         .fetch_one(&self.pool)
         .await?;
-        Ok((job_from_row(row)?, false))
+        let existing_fingerprint: Option<String> = row.try_get("request_fingerprint")?;
+        if existing_fingerprint.as_deref() != Some(request_fingerprint) {
+            return Err("request key was reused with a different payload".into());
+        }
+        Ok((
+            self.get_by_id(row.try_get::<String, _>("id")?.as_str())
+                .await?,
+            false,
+        ))
     }
 
     pub async fn get_for_owner(&self, id: &str, owner_id: &str) -> RepositoryResult<Option<Job>> {

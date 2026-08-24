@@ -103,6 +103,15 @@ describe('generation store API history integration', () => {
     expect(payloads[0]).toEqual(expect.objectContaining({ request_id: retained }))
     expect(useGenerationStore.getState().pendingRequestId).toBeNull()
   })
+
+  it('drops the pending request ID when generation input or worker changes', () => {
+    useGenerationStore.setState({ pendingRequestId: '11111111-1111-4111-8111-111111111111' })
+    useGenerationStore.getState().setParams({ prompt: 'edited' })
+    expect(useGenerationStore.getState().pendingRequestId).toBeNull()
+    useGenerationStore.setState({ pendingRequestId: '11111111-1111-4111-8111-111111111111' })
+    useGenerationStore.getState().setWorkerPreference({ mode: 'explicit', worker_id: 'rtx5060ti' })
+    expect(useGenerationStore.getState().pendingRequestId).toBeNull()
+  })
 })
 
 describe('非同期プロンプト強化の競合防止', () => {

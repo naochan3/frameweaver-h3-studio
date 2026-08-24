@@ -10,7 +10,8 @@ use axum::{
     routing::{get, post},
 };
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::{
@@ -104,6 +105,12 @@ impl ApiError {
             message: "job cannot be cancelled".to_owned(),
         }
     }
+    fn idempotency_conflict() -> Self {
+        Self {
+            status: StatusCode::CONFLICT,
+            message: "request ID was reused with different input".to_owned(),
+        }
+    }
     fn internal() -> Self {
         Self {
             status: StatusCode::INTERNAL_SERVER_ERROR,
@@ -166,6 +173,10 @@ async fn create_job(
     {
         return Err(ApiError::bad_request("invalid job request"));
     }
+    let request_fingerprint = request
+        .request_id
+        .as_ref()
+        .map(|_| fingerprint_request(&request));
     let owner_id = owner.0.clone();
     let capability = match request.kind.as_str() {
         "video" => WorkerCapability::Video,
@@ -197,7 +208,14 @@ async fn create_job(
         Some(request_id) => {
             state
                 .repository
-                .create_or_get_routed(new_job, Some(worker_id.as_str()), request_id)
+                .create_or_get_routed(
+                    new_job,
+                    Some(worker_id.as_str()),
+                    request_id,
+                    request_fingerprint
+                        .as_deref()
+                        .expect("fingerprint exists with request ID"),
+                )
                 .await
         }
         None => state
@@ -206,7 +224,13 @@ async fn create_job(
             .await
             .map(|job| (job, true)),
     }
-    .map_err(|_| ApiError::internal())?;
+    .map_err(|error| {
+        if error.to_string() == "request key was reused with a different payload" {
+            ApiError::idempotency_conflict()
+        } else {
+            ApiError::internal()
+        }
+    })?;
 
     if !created {
         return Ok((StatusCode::OK, Json(job)));
@@ -234,6 +258,16 @@ async fn create_job(
         .transition("new", "queued")
         .info();
     Ok((StatusCode::CREATED, Json(job)))
+}
+
+fn fingerprint_request(request: &CreateJobRequest) -> String {
+    let serialized = serde_json::to_vec(&json!({
+        "kind": request.kind, "mode": request.mode, "prompt": request.prompt,
+        "settings": request.settings, "workflow": request.workflow,
+        "worker_preference": request.worker_preference,
+    }))
+    .expect("request values are serializable");
+    format!("{:x}", Sha256::digest(serialized))
 }
 
 fn required_vram_mb(kind: &str, mode: &str) -> Option<u64> {

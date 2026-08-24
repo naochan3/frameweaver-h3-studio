@@ -261,6 +261,42 @@ async fn jobs_api_replay_with_same_request_key_submits_once() {
 }
 
 #[tokio::test]
+async fn jobs_api_rejects_reused_request_key_with_changed_payload() {
+    let (comfy_address, comfy_state, comfy_server) = mock_comfy().await;
+    let (api_url, _, api_server) = api_server(comfy_address).await;
+    let owner = owner();
+    let mut request = job_request();
+    request["request_id"] = Value::String(Uuid::new_v4().to_string());
+    let client = reqwest::Client::new();
+    assert_eq!(
+        client
+            .post(format!("{api_url}/api/jobs"))
+            .header("X-FrameWeaver-Owner", &owner)
+            .json(&request)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CREATED
+    );
+    request["prompt"] = Value::String("different input".to_owned());
+    assert_eq!(
+        client
+            .post(format!("{api_url}/api/jobs"))
+            .header("X-FrameWeaver-Owner", &owner)
+            .json(&request)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CONFLICT
+    );
+    assert_eq!(comfy_state.prompt_ids.lock().unwrap().len(), 1);
+    api_server.abort();
+    comfy_server.abort();
+}
+
+#[tokio::test]
 async fn jobs_api_submits_server_generated_uuid_and_owner_can_cancel_only_that_job() {
     let (comfy_address, comfy_state, comfy_server) = mock_comfy().await;
     let (api_url, _, api_server) = api_server(comfy_address).await;

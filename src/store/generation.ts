@@ -228,7 +228,7 @@ export function imageSlots(mode: GenerationMode): [number, number] {
 
 export const useGenerationStore = create<GenerationState>((set, get) => ({
   workerPreference: { mode: 'auto' },
-  setWorkerPreference: (workerPreference) => set({ workerPreference }),
+  setWorkerPreference: (workerPreference) => set({ workerPreference, pendingRequestId: null }),
   connected: false,
   wsConnected: false,
   queueRemaining: 0,
@@ -496,20 +496,20 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
 
   setAppTab: (tab) => set({ appTab: tab }),
 
-  setImageParams: (patch) => set((s) => ({ imageParams: { ...s.imageParams, ...patch } })),
+  setImageParams: (patch) => set((s) => ({ imageParams: { ...s.imageParams, ...patch }, pendingRequestId: null })),
 
   setImageModel: (model) => {
-    set((s) => ({ imageParams: { ...s.imageParams, ...imageRecommendedParams(model) }, imageRewriterAvailable: false }))
+    set((s) => ({ imageParams: { ...s.imageParams, ...imageRecommendedParams(model) }, imageRewriterAvailable: false, pendingRequestId: null }))
     void imageRewriterInstalled(model).then((ok) => {
       if (get().imageParams.model === model) set({ imageRewriterAvailable: ok })
     })
   },
 
   resetVideoRecommended: () =>
-    set((s) => ({ params: { ...s.params, ...videoRecommendedParams() } })),
+    set((s) => ({ params: { ...s.params, ...videoRecommendedParams() }, pendingRequestId: null })),
 
   resetImageRecommended: () =>
-    set((s) => ({ imageParams: { ...s.imageParams, ...imageRecommendedParams(s.imageParams.model) } })),
+    set((s) => ({ imageParams: { ...s.imageParams, ...imageRecommendedParams(s.imageParams.model) }, pendingRequestId: null })),
 
   generateImage: async () => {
     let { imageParams } = get()
@@ -553,10 +553,11 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
       params: { ...s.params, mode },
       sources: s.sources.slice(0, max),
       error: null,
+      pendingRequestId: null,
     }))
   },
 
-  setParams: (patch) => set((s) => ({ params: { ...s.params, ...patch } })),
+  setParams: (patch) => set((s) => ({ params: { ...s.params, ...patch }, pendingRequestId: null })),
 
   addSourceFiles: async (files) => {
     const { params, sources } = get()
@@ -569,7 +570,7 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
         const name = await client.uploadImage(file)
         added.push({ name, previewUrl: URL.createObjectURL(file) })
       }
-      set((s) => ({ sources: [...s.sources, ...added], status: 'idle' }))
+      set((s) => ({ sources: [...s.sources, ...added], status: 'idle', pendingRequestId: null }))
     } catch (e) {
       set({ status: 'error', error: e instanceof Error ? e.message : String(e) })
     }
@@ -664,7 +665,7 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
     })
   },
 
-  removeSource: (index) => set((s) => ({ sources: s.sources.filter((_, i) => i !== index) })),
+  removeSource: (index) => set((s) => ({ sources: s.sources.filter((_, i) => i !== index), pendingRequestId: null })),
 
   generate: async () => {
     let { params } = get()
