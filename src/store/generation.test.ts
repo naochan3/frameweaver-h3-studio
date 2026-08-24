@@ -72,6 +72,18 @@ describe('RECENT のプロンプト補完(reloadFolder)', () => {
 })
 
 describe('非同期プロンプト強化の競合防止', () => {
+  it('画像モデル切替直後は可用性確認が完了するまで強化を無効化する', () => {
+    vi.stubGlobal('fetch', () => new Promise(() => {}))
+    store.useGenerationStore.setState((s) => ({
+      imageParams: { ...s.imageParams, model: 'krea2' },
+      imageRewriterAvailable: true,
+    }))
+
+    store.useGenerationStore.getState().setImageModel('zimage')
+
+    expect(store.useGenerationStore.getState().imageRewriterAvailable).toBe(false)
+  })
+
   it('強化中に動画条件を編集した場合は古い応答で上書きしない', async () => {
     let resolveFetch!: (value: unknown) => void
     vi.stubGlobal('fetch', () => new Promise((resolve) => { resolveFetch = resolve }))
