@@ -118,6 +118,15 @@ describe('generation store API history integration', () => {
     useGenerationStore.getState().setWorkerPreference({ mode: 'explicit', worker_id: 'rtx5060ti' })
     expect(useGenerationStore.getState().pendingRequestId).toBeNull()
   })
+
+  it('drops the pending request ID when switching between image and video tabs', () => {
+    useGenerationStore.setState({ appTab: 'image', pendingRequestId: '11111111-1111-4111-8111-111111111111' })
+    useGenerationStore.getState().setAppTab('video')
+    expect(useGenerationStore.getState().pendingRequestId).toBeNull()
+    useGenerationStore.setState({ appTab: 'video', pendingRequestId: '22222222-2222-4222-8222-222222222222' })
+    useGenerationStore.getState().setAppTab('image')
+    expect(useGenerationStore.getState().pendingRequestId).toBeNull()
+  })
 })
 
 describe('非同期プロンプト強化の競合防止', () => {

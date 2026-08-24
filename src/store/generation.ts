@@ -494,7 +494,7 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
     })
   },
 
-  setAppTab: (tab) => set({ appTab: tab }),
+  setAppTab: (tab) => set({ appTab: tab, pendingRequestId: null }),
 
   setImageParams: (patch) => set((s) => ({ imageParams: { ...s.imageParams, ...patch }, pendingRequestId: null })),
 
