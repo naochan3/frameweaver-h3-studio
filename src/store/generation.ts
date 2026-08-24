@@ -483,7 +483,7 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
   setImageParams: (patch) => set((s) => ({ imageParams: { ...s.imageParams, ...patch } })),
 
   setImageModel: (model) => {
-    set((s) => ({ imageParams: { ...s.imageParams, ...imageRecommendedParams(model) } }))
+    set((s) => ({ imageParams: { ...s.imageParams, ...imageRecommendedParams(model) }, imageRewriterAvailable: false }))
     void imageRewriterInstalled(model).then((ok) => {
       if (get().imageParams.model === model) set({ imageRewriterAvailable: ok })
     })

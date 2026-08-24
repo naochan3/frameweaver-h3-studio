@@ -148,6 +148,7 @@ function finalizeImageRewrite(out: string, idea: string, model: ImageModel): str
     return validateImageRewrite(out, idea, model)
   } catch (error) {
     if (isCjkError(error)) {
+      if ([...requestedVisibleText(idea)].some((value) => CJK_RE.test(value))) throw error
       const stripped = stripCjk(out)
       try {
         return validateImageRewrite(stripped, idea, model)
@@ -162,13 +163,31 @@ function finalizeImageRewrite(out: string, idea: string, model: ImageModel): str
 }
 
 function requestedVisibleText(input: string): Set<string> {
-  return new Set([...input.matchAll(/[「『]([^」』]+)[」』]/g)].map((match) => match[1]))
+  const requested = new Set<string>()
+  for (const match of input.matchAll(/「([^」\r\n]+)」|『([^』\r\n]+)』|"([^"\r\n]+)"/g)) {
+    const value = match[1] ?? match[2] ?? match[3]
+    const before = input.slice(Math.max(0, (match.index ?? 0) - 60), match.index)
+    const after = input.slice((match.index ?? 0) + match[0].length, (match.index ?? 0) + match[0].length + 40)
+    const japaneseNegative = /^\s*(?:と)?\s*(?:表示|記載|印字|描画|書|入れ)[^。、\r\n]{0,12}(?:しない|しません|不要|禁止|なし)/.test(after)
+    const englishNegative = /(?:do\s+not|don't|not|without)\s+(?:display|show|write)[^"\r\n]*$/i.test(before)
+    const japaneseDisplayRequest = /^\s*(?:と)?\s*(?:表示|記載|印字|描画|書(?:く|いて)|入れ(?:る|て))/.test(after)
+    const englishDisplayRequest = /(?:(?:sign|label|screen|display|poster|billboard|caption|text|logo|title|placard|marquee)\s+(?:reads?|says?|shows?|displays?)|(?:display|show|write|render)|text\s+is)\s*$/i.test(before)
+    if (!japaneseNegative && !englishNegative && (japaneseDisplayRequest || englishDisplayRequest)) requested.add(value)
+  }
+  return requested
+}
+
+function withoutPreservedContent(text: string): string {
+  return text.replace(/<d>[^<]*<\/d>/g, ' ').replace(/"[^"\r\n]*"/g, ' ')
 }
 
 export function validateImageRewrite(output: string, input: string, model: ImageModel): string {
   const text = output.trim()
   if (!text || /\r?\n/.test(text)) throw new Error('プロンプト強化の出力形式が単一段落ではありません')
   const allowed = requestedVisibleText(input)
+  if ([...allowed].some((value) => !text.includes(`"${value}"`))) {
+    throw new Error('プロンプト強化に指定された表示文字が残っていません')
+  }
   const prose = text.replace(/"([^"]*)"/g, (quoted, value: string) => (allowed.has(value) ? '' : quoted))
   if (CJK_RE.test(prose)) throw new Error('プロンプト強化に英語以外の文字が残っています')
   const words = text.match(/[A-Za-z0-9]+(?:[-'][A-Za-z0-9]+)*/g)?.length ?? 0
@@ -199,10 +218,25 @@ export function validateVideoRewrite(output: string, durationSec: number, mode: 
   if (lines.length !== fields.length || fields.some((field, index) => !lines[index].startsWith(field) || !lines[index].slice(field.length).trim())) {
     throw new Error('プロンプト強化の出力形式が不正です')
   }
-  for (const match of text.matchAll(/At\s+(\d{2}):(\d{2}\.\d{3})/g)) {
-    const seconds = Number(match[1]) * 60 + Number(match[2])
-    if (seconds >= durationSec) throw new Error('プロンプト強化のShot時刻が動画尺を超えています')
+  const structuralDescription = withoutPreservedContent(lines[0].slice(fields[0].length).trim())
+  if (!structuralDescription.startsWith('[Shot 1]')) throw new Error('プロンプト強化のShot番号が不正です')
+  const laterShotHeaders = [...structuralDescription.matchAll(/\[Shot (\d+)\]\s+At\s+(\d{2}):(\d{2}\.\d{3})(,?)/g)]
+  const shots = [1, ...laterShotHeaders.map((match) => Number(match[1]))]
+  if (shots.length === 0 || shots.some((shot, index) => shot !== index + 1)) throw new Error('プロンプト強化のShot番号が不正です')
+  if (mode === 'first_last' || mode === 'last') {
+    const match = mode === 'first_last'
+      ? /Picture 2 \(from Shot (\d+)\)/.exec(text)
+      : /<Picture 1> \(from \[Shot (\d+)\]\)/.exec(text)
+    if (!match || Number(match[1]) !== shots.at(-1)) throw new Error('プロンプト強化の参照画像アラインメントが不正です')
   }
+  let previousSeconds = -1
+  for (const match of laterShotHeaders) {
+    const seconds = Number(match[2]) * 60 + Number(match[3])
+    if (seconds >= durationSec) throw new Error('プロンプト強化のShot時刻が動画尺を超えています')
+    if (seconds <= previousSeconds) throw new Error('プロンプト強化のShot時刻順が不正です')
+    previousSeconds = seconds
+  }
+  if (laterShotHeaders.some((match) => match[4] !== ',')) throw new Error('プロンプト強化の出力形式が不正です')
   return text
 }
 
