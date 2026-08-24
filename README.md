@@ -1,7 +1,46 @@
 # FrameWeaver H3 Studio
 
-ローカルPC(**RTX 4070 12GB / RAM 64GB** 想定)で動く **動画+画像生成スタジオ**。
-ComfyUI をバックエンドに、複数のAIモデルを1つのWebUIから使えます。**プロンプトはローカルLLMが自動強化**するので、一言入れるだけで本番品質の指示に変換されます。
+ローカルGPUで動く、ComfyUIベースの**動画・画像生成スタジオ**。プロンプト強化、モデル切替、履歴、LoRA、VRAM操作を、PC・Mac・スマートフォンから1つのUIで扱えます。
+
+![React](https://img.shields.io/badge/React-19-149eca?logo=react&logoColor=white)
+![ComfyUI](https://img.shields.io/badge/Backend-ComfyUI-222222)
+![Tailscale](https://img.shields.io/badge/Remote-Tailscale-242424?logo=tailscale&logoColor=white)
+![Tests](https://img.shields.io/badge/tests-Vitest-2f855a)
+
+![FrameWeaver H3 Studio desktop UI](docs/assets/readme/studio-desktop.png)
+
+<p align="center">
+  <img src="docs/assets/readme/studio-mobile.png" width="390" alt="FrameWeaver H3 Studio mobile UI">
+</p>
+
+## ひと目で分かる特徴
+
+- MiniMax H3動画、Z-Image、Krea 2、Illustrious系SDXLを1画面で操作
+- Ollama上のローカルLLMが日本語の短い指示をモデル別プロンプトへ強化
+- 生成進捗、履歴、LoRAカタログ、停止、VRAM解放を内蔵
+- Ember / Ocean / Violetのテーマを端末ごとに保存
+- Tailscale Serveで公開インターネットへ出さず、tailnet内のPC・Mac・スマホから接続
+
+## システム構成
+
+```text
+Browser ── HTTPS/Tailscale ── FrameWeaver WebUI :5180
+                                      ├─ /comfy/*    ── ComfyUI :8189 ── GPU / Models
+                                      └─ /rewriter/* ── Ollama :11434
+```
+
+現行 `main` は**1つのFrameWeaverから1つのComfyUI**へ接続します。複数GPU PCはPCごとの独立URLとして利用できますが、共有キューやGPU自動ルーティングは未実装です。詳細は [Tailscale・複数マシン構成](docs/TAILSCALE-MULTI-MACHINE.md) を参照してください。
+
+## Quick Start
+
+```powershell
+git clone https://github.com/naochan3/frameweaver-h3-studio.git
+cd frameweaver-h3-studio
+npm ci
+start_studio.bat
+```
+
+前提モデルとComfyUIをまだ用意していない場合は、下の「セットアップ」を順番に進めてください。
 
 ## できること
 
@@ -35,9 +74,9 @@ ComfyUI をバックエンドに、複数のAIモデルを1つのWebUIから使�
 ### 1. WebUI(このリポジトリ)
 
 ```powershell
-git clone <このリポジトリ>
+git clone https://github.com/naochan3/frameweaver-h3-studio.git
 cd frameweaver-h3-studio
-npm install
+npm ci
 ```
 
 ### 2. ComfyUI バックエンド
@@ -98,12 +137,18 @@ Ollama →(未起動なら起動)→ ComfyUI(8189)→ WebUI(5180)→ ブラウ�
 ### 手動起動
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File C:\AI\ComfyUI_H3\start.ps1  # ComfyUI
-npm run dev                                                          # WebUI(このフォルダ)
-# ブラウザで http://localhost:5180
+# 1. バックエンド
+powershell -ExecutionPolicy Bypass -File C:\AI\ComfyUI_H3\start.ps1
+# 2. Rust API (別ターミナル、このフォルダで)
+npm run dev:api
+# 3. WebUI (別ターミナル、このフォルダで)
+npm run dev
+# 4. ブラウザで http://localhost:5180
 ```
 
-生成を止めるだけならヘッダー「停止」、VRAMを空けるなら「解放」。
+`npm run dev:api` は Rust API を `127.0.0.1:5181` に固定し、Vite の `/api/*` プロキシと対にします。本番の Rust 既定ポートは引き続き `127.0.0.1:5180` です。`start_studio.bat` はComfyUI・Rust API・WebUIをすべて起動します。
+
+終了はそれぞれのウィンドウを閉じるだけ。生成を止めたいだけならWebUIヘッダーの「停止」、VRAMを空けたいときは「解放」。
 
 ### 同じWi-Fi(LAN)内のスマホ・タブレットから開く
 
@@ -115,6 +160,17 @@ WebUIは `0.0.0.0` 待受。同じネットワークの端末から `http://<PC�
   New-NetFirewallRule -DisplayName "FrameWeaver WebUI 5180" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 5180 -Profile Private
   ```
 - 公開はLAN内のみ(インターネットには出さない)
+
+### Tailscale経由で、どこからでも開く
+
+FrameWeaverの5180だけをTailscale Serveでtailnet内HTTPSへ中継します。ComfyUIやOllamaの管理ポートは直接公開しません。
+
+```powershell
+tailscale serve --bg --https=10000 http://127.0.0.1:5180
+tailscale serve status
+```
+
+別端末から `https://<device>.<tailnet>.ts.net:10000/` を開きます。複数GPU PC、端末別テスト、解除方法は [docs/TAILSCALE-MULTI-MACHINE.md](docs/TAILSCALE-MULTI-MACHINE.md) にまとめています。
 
 ---
 
@@ -274,7 +330,66 @@ docs/
 start_studio.bat         Ollama→ComfyUI→WebUI をまとめて起動
 ```
 
-検証: `npm run lint` / `npm run test` / `npm run build`。
+## 検証
+
+| 段階 | コマンド・操作 | 合格条件 |
+|---|---|---|
+| 依存導入 | `npm ci` | exit 0、lockfileどおりに導入 |
+| 単体テスト | `npm test` | 全テスト成功 |
+| 静的検査 | `npm run lint` | error 0 |
+| 本番ビルド | `npm run build` | `dist/`生成、exit 0 |
+| README画像 | `npm run docs:verify` | 参照2件とPNG寸法が一致 |
+| 実行環境smoke | `npm run smoke:runtime -- --base-url <URL>` | HTML・GPU・モデルAPIが全て成功 |
+| ComfyUI | `/comfy/system_stats` | HTTP 200、GPU情報あり |
+| Tailscale | 別端末からtailnet URL | HTML/JS/CSSがHTTP 200 |
+| スマホ | 390px相当で操作 | 横スクロールなし、入力と生成ボタン表示 |
+
+スクリーンショットの更新方法は [docs/README-SCREENSHOTS.md](docs/README-SCREENSHOTS.md) を参照してください。
+
+---
+
+## Access boundary
+
+P0/P1の境界はTailnet ACLだけです。ブラウザowner UUIDは誤操作の所有者分離用であり認証ではありません。Discord OAuth/allowlistはP2であり、`DISCORD_AUTH_ENABLED=1` はdaemonをfail-closedで停止します。OAuthの環境変数やRedirect URIを設定して運用しないでください。
+
+---
+
+## ComfyUI custom-node プロファイル
+
+`config/comfy-profiles.json` は custom node の起動プロファイルを宣言します。既定は現行起動と互換な `full` で、起動引数は出力しません。Scheduled Task・実行中の ComfyUI・WebUI からはプロファイルを変更しません。切替は ComfyUI 再起動を伴うため、操作者が停止中に明示的に行ってください。
+
+```powershell
+# `full`（既定）は現在の起動を変更しない
+.\scripts\Get-ComfyProfileArgs.ps1
+
+# minimal custom-node プロファイル用の引数を表示するだけ（起動はしない）
+.\scripts\Get-ComfyProfileArgs.ps1 -Profile image
+
+# インストール済み custom_nodes を読取り診断するだけ
+.\scripts\Test-ComfyProfile.ps1 -Profile video
+```
+
+- `minimal`: すべての custom node を無効化し、health/基本接続の診断に使う。
+- `image` / `video`: 現行workflowの画像生成（image-workflow）とH3動画生成（CreateVideo/SaveVideo）はcore/comfy_extrasだけで動作するため、`minimal` と同じ `--disable-all-custom-nodes` だけへ展開する。
+- `full`: 現行互換の全 custom node モード。出力フォルダを開く `frameweaver_openfolder` のリモートGUI endpoint はこのプロファイルだけで許可する。
+
+`Test-ComfyProfile.ps1 -ComfyLogPath <ComfyUIログ>` は、custom node を import せず既存ログから import failure も報告します。
+
+将来custom nodeを追加する場合は、対応するworkflow・必要な理由・profileの厳密な引数配列を検証するPesterテストを同じ変更に含めてください。
+
+## Windows 常駐ライフサイクル（dry-run が既定）
+
+`frameweaverd` はビルド済み Rust binary と `dist/` を直接配信します。次のコマンドは Scheduled Task を**変更せず**、action・working directory・3回/1分の再試行設定と rollback コマンドだけを表示します。
+
+```powershell
+.\scripts\Install-FrameWeaverdTask.ps1
+```
+
+実際に登録するのは操作者が `-Apply` を付けた場合だけです。`-RollbackPath <path>` は dry-run でも export でき、`-Apply` 時には既存 Task XML を含む復元スクリプト（新規 Task なら unregister）を出力します。
+
+ランナーは `%LOCALAPPDATA%\FrameWeaver\logs` に timestamped JSONL を稼働中から追記し、stdout/stderr・exit/panic と health wait の結果を記録します。10 MiB 到達時に次ファイルへ切替え、JSONL/stdout/stderr は7日保持です。ログは同一 Windows ユーザーだけが読める `%LOCALAPPDATA%` 配下に置き、token/secret/password/authorization と prompt 値を最小限 redact します。ログディレクトリを共有・同期・公開しないでください。
+
+Pester の `scripts/tests/FrameWeaverdLifecycle.Tests.ps1` は dry-run が Task を登録しないことを実測します。custom-node profile の missing/import report は既存の `scripts/tests/ComfyProfiles.Tests.ps1` で検証します。
 
 ---
 

@@ -1,0 +1,12 @@
+{
+  "unet": { "class_type": "UNETLoader", "inputs": { "unet_name": "z_image_turbo_nvfp4.safetensors", "weight_dtype": "default" } },
+  "clip": { "class_type": "CLIPLoader", "inputs": { "clip_name": "qwen_3_4b.safetensors", "type": "lumina2", "device": "default" } },
+  "vae": { "class_type": "VAELoader", "inputs": { "vae_name": "ae_zimage.safetensors" } },
+  "positive": { "class_type": "CLIPTextEncode", "inputs": { "text": "a small blue square", "clip": ["clip", 0] } },
+  "negative": { "class_type": "ConditioningZeroOut", "inputs": { "conditioning": ["positive", 0] } },
+  "latent": { "class_type": "EmptySD3LatentImage", "inputs": { "width": 256, "height": 256, "batch_size": 1 } },
+  "shift": { "class_type": "ModelSamplingAuraFlow", "inputs": { "model": ["unet", 0], "shift": 3.0 } },
+  "sampler": { "class_type": "KSampler", "inputs": { "model": ["shift", 0], "positive": ["positive", 0], "negative": ["negative", 0], "latent_image": ["latent", 0], "seed": 424242, "steps": 1, "cfg": 1.0, "sampler_name": "res_multistep", "scheduler": "simple", "denoise": 1.0 } },
+  "decode": { "class_type": "VAEDecode", "inputs": { "samples": ["sampler", 0], "vae": ["vae", 0] } },
+  "save": { "class_type": "SaveImage", "inputs": { "images": ["decode", 0], "filename_prefix": "zimage/FrameWeaver/task9-e2e" } }
+}

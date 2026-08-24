@@ -1,4 +1,7 @@
 import type { LoraMetaMap, WorkflowJson } from './types'
+import { getOwnerId } from './frameweaver-api'
+import { collectNodeCapability } from './capability-collector'
+import type { NodeCapabilitySnapshot } from './model-capability'
 
 export interface ProgressEvent {
   type: 'status' | 'progress' | 'executing' | 'executed' | 'error' | 'preview'
@@ -38,6 +41,7 @@ export class ComfyClient {
   private ws: WebSocket | null = null
   private listeners = new Set<(ev: ProgressEvent) => void>()
   private lastPreviewUrl: string | null = null
+  private activePromptId: string | null = null
 
   constructor(baseUrl: string) {
     this.baseUrl = baseUrl.replace(/\/$/, '')
@@ -53,16 +57,26 @@ export class ComfyClient {
     for (const cb of this.listeners) cb(ev)
   }
 
-  connect() {
+  connect(promptId?: string) {
+    if (promptId && promptId !== this.activePromptId) {
+      this.activePromptId = promptId
+      this.ws?.close()
+      this.ws = null
+    }
     if (this.ws && this.ws.readyState <= WebSocket.OPEN) return
-    const wsUrl = this.baseUrl.replace(/^http/, 'ws') + `/ws?clientId=${this.clientId}`
+    const params = new URLSearchParams({ clientId: this.clientId })
+    if (this.activePromptId) {
+      params.set('prompt_id', this.activePromptId)
+      params.set('owner', getOwnerId())
+    }
+    const wsUrl = this.baseUrl.replace(/^http/, 'ws') + `/ws?${params}`
     this.ws = new WebSocket(wsUrl)
     this.ws.binaryType = 'arraybuffer'
     this.ws.onmessage = (msg) => this.handleMessage(msg)
     this.ws.onclose = () => {
       this.emit({ type: 'status', message: 'disconnected' })
       // 3秒後に自動再接続
-      setTimeout(() => this.connect(), 3000)
+      setTimeout(() => this.connect(this.activePromptId ?? undefined), 3000)
     }
     this.ws.onopen = () => this.emit({ type: 'status', message: 'connected' })
   }
@@ -147,18 +161,6 @@ export class ComfyClient {
     return json.subfolder ? `${json.subfolder}/${json.name}` : json.name
   }
 
-  async interrupt(): Promise<void> {
-    await fetch(`${this.baseUrl}/interrupt`, { method: 'POST' })
-  }
-
-  async clearQueue(): Promise<void> {
-    await fetch(`${this.baseUrl}/queue`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ clear: true }),
-    })
-  }
-
   /** 出力フォルダをエクスプローラーで開く(カスタムノード frameweaver_openfolder が必要) */
   async openOutputFolder(subdir: string): Promise<boolean> {
     try {
@@ -230,12 +232,13 @@ export class ComfyClient {
     return outputs
   }
 
-  viewUrl(output: HistoryOutput): string {
+  viewUrl(output: HistoryOutput, promptId?: string): string {
     const params = new URLSearchParams({
       filename: output.filename,
       subfolder: output.subfolder,
       type: output.type,
     })
+    if (promptId) params.set('prompt_id', promptId)
     return `${this.baseUrl}/view?${params}`
   }
 
@@ -303,7 +306,7 @@ export class ComfyClient {
 
   async systemStats(): Promise<{ vramTotal: number; vramFree: number } | null> {
     try {
-      const res = await fetch(`${this.baseUrl}/system_stats`)
+      const res = await fetch(`${this.baseUrl}/system_stats`, { signal: AbortSignal.timeout(2_000) })
       if (!res.ok) return null
       const json = (await res.json()) as { devices?: Array<{ vram_total?: number; vram_free?: number }> }
       const dev = json.devices?.[0]
@@ -312,5 +315,9 @@ export class ComfyClient {
     } catch {
       return null
     }
+  }
+
+  async capabilities(): Promise<NodeCapabilitySnapshot> {
+    return collectNodeCapability(this.baseUrl)
   }
 }

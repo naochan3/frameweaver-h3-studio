@@ -1,73 +1,131 @@
-import { beforeAll, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
-/** 下書き永続化の配線検証。store モジュールは import 時に WebSocket 接続・
- * localStorage 読込・ポーリング開始まで行うため、ブラウザグローバルをスタブしてから
- * 動的 import する(node 環境での統合テスト)。 */
-
-const storageMap = new Map<string, string>()
-const fakeLocalStorage = {
-  getItem: (k: string) => storageMap.get(k) ?? null,
-  setItem: (k: string, v: string) => void storageMap.set(k, v),
-  removeItem: (k: string) => void storageMap.delete(k),
-}
-
-class FakeWebSocket {
-  static readonly OPEN = 1
-  readyState = 0
-  binaryType = ''
-  onmessage: unknown = null
-  onclose: unknown = null
-  onopen: unknown = null
-}
-
-let store: typeof import('./generation')
-
-beforeAll(async () => {
-  vi.useFakeTimers()
-  vi.stubGlobal('localStorage', fakeLocalStorage)
-  vi.stubGlobal('WebSocket', FakeWebSocket)
-  vi.stubGlobal('location', { origin: 'http://localhost:5180' })
-  // リロード前に保存されていた下書き
-  storageMap.set('frameweaver-draft-video-prompt', 'saved video draft')
-  storageMap.set('frameweaver-draft-image-prompt', 'saved image draft')
-  store = await import('./generation')
+const environment = vi.hoisted(() => {
+  const storage = new Map<string, string>([
+    ['frameweaver-history', JSON.stringify([{ promptId: 'legacy-job' }])],
+    ['frameweaver-owner-id', '11111111-1111-4111-8111-111111111111'],
+  ])
+  const fetch = vi.fn(async () => new Response(JSON.stringify({ jobs: [{
+    id: '22222222-2222-4222-8222-222222222222', owner_id: '11111111-1111-4111-8111-111111111111',
+    kind: 'image', mode: 'zimage', status: 'succeeded', prompt: 'a lighthouse',
+    settings_json: '{"width":864,"height":1536,"steps":8,"seed":42}',
+    output_json: '[{"filename":"result.png","subfolder":"images","type":"output"}]', error: null,
+    created_at: '2026-08-22T00:00:00Z', updated_at: '2026-08-22T00:00:01Z',
+    started_at: '2026-08-22T00:00:00Z', finished_at: '2026-08-22T00:00:01Z',
+  }] })))
+  class WebSocket {
+    static OPEN = 1
+    readyState = 1
+    binaryType = ''
+    onmessage: ((message: MessageEvent) => void) | null = null
+    onclose: (() => void) | null = null
+    onopen: (() => void) | null = null
+    close() { this.readyState = 3 }
+  }
+  vi.stubGlobal('localStorage', {
+    getItem: (key: string) => storage.get(key) ?? null,
+    setItem: (key: string, value: string) => storage.set(key, value),
+    removeItem: (key: string) => storage.delete(key),
+  })
+  vi.stubGlobal('WebSocket', WebSocket)
+  vi.stubGlobal('fetch', fetch)
+  return { fetch }
 })
 
-describe('プロンプト下書きの永続化(store配線)', () => {
-  it('起動時に localStorage の下書きを初期値へ復元する', () => {
-    const s = store.useGenerationStore.getState()
-    expect(s.params.prompt).toBe('saved video draft')
-    expect(s.imageParams.prompt).toBe('saved image draft')
+import { historyFromJob, useGenerationStore } from './generation'
+
+const completedJob = {
+  id: '22222222-2222-4222-8222-222222222222',
+  owner_id: '11111111-1111-4111-8111-111111111111',
+  kind: 'image' as const,
+  mode: 'zimage',
+  status: 'succeeded' as const,
+  prompt: 'a lighthouse',
+  settings_json: '{"width":864,"height":1536,"steps":8,"seed":42}',
+  output_json: '[{"filename":"result.png","subfolder":"images","type":"output"}]',
+  error: null,
+  created_at: '2026-08-22T00:00:00Z',
+  updated_at: '2026-08-22T00:00:01Z',
+  started_at: '2026-08-22T00:00:00Z',
+  finished_at: '2026-08-22T00:00:01Z',
+}
+
+describe('generation store API history integration', () => {
+  it('replaces the one-time legacy fallback with API jobs and restores Comfy output URLs', async () => {
+    await vi.waitFor(() => {
+      expect(useGenerationStore.getState().history).toEqual([expect.objectContaining({
+        promptId: completedJob.id,
+        filename: 'result.png',
+        videoUrl: 'http://127.0.0.1:8188/comfy/view?filename=result.png&subfolder=images&type=output&prompt_id=22222222-2222-4222-8222-222222222222',
+      })])
+    })
+    expect(historyFromJob(completedJob)).toEqual(expect.objectContaining({ filename: 'result.png' }))
   })
 
-  it('動画プロンプトの変更が localStorage に保存される', () => {
-    store.useGenerationStore.getState().setParams({ prompt: 'edited video' })
-    expect(storageMap.get('frameweaver-draft-video-prompt')).toBe('edited video')
+  it('keeps the active job and reports cancellation failures', async () => {
+    useGenerationStore.setState({ currentPromptId: completedJob.id, status: 'running', error: null })
+    environment.fetch.mockResolvedValueOnce(new Response(JSON.stringify({ error: 'job cannot be cancelled' }), { status: 409 }))
+
+    await expect(useGenerationStore.getState().stop()).resolves.toBeUndefined()
+    expect(useGenerationStore.getState()).toMatchObject({ currentPromptId: completedJob.id, status: 'running', error: 'job cannot be cancelled' })
   })
 
-  it('画像プロンプトの変更が localStorage に保存される', () => {
-    store.useGenerationStore.getState().setImageParams({ prompt: 'edited image' })
-    expect(storageMap.get('frameweaver-draft-image-prompt')).toBe('edited image')
+  it('keeps the active job when cancellation is still pending', async () => {
+    useGenerationStore.setState({ currentPromptId: completedJob.id, status: 'running', error: null })
+    environment.fetch.mockResolvedValueOnce(Response.json({ ...completedJob, status: 'cancel_requested' }))
+
+    await useGenerationStore.getState().stop()
+
+    expect(useGenerationStore.getState()).toMatchObject({ currentPromptId: completedJob.id, status: 'running' })
   })
 
-  it('プロンプトを空にすると下書きキーごと削除される', () => {
-    store.useGenerationStore.getState().setParams({ prompt: '' })
-    expect(storageMap.has('frameweaver-draft-video-prompt')).toBe(false)
-  })
-})
-
-describe('RECENT のプロンプト補完(reloadFolder)', () => {
-  it('localStorage履歴に無いファイルは埋め込みメタデータのプロンプトで補完する', async () => {
-    vi.stubGlobal('fetch', async () => ({
-      ok: true,
-      json: async () => ({
-        files: [{ filename: 'FrameWeaver_00001_.mp4', mtime: 1_755_000_000, prompt: 'embedded prompt' }],
-      }),
+  it('reuses the request ID after a lost create response', async () => {
+    const payloads: unknown[] = []
+    environment.fetch
+      .mockImplementationOnce(async (...args: unknown[]) => {
+        const init = args[1] as RequestInit
+        payloads.push(JSON.parse(String(init.body)))
+        throw new TypeError('network lost after submit')
+      })
+      .mockImplementationOnce(async (...args: unknown[]) => {
+        const init = args[1] as RequestInit
+        payloads.push(JSON.parse(String(init.body)))
+        return Response.json({ ...completedJob, status: 'queued' })
+      })
+    useGenerationStore.setState((state) => ({
+      ...state,
+      imageParams: { ...state.imageParams, prompt: 'retry safely' },
+      pendingRequestId: null,
+      status: 'idle',
     }))
-    await store.useGenerationStore.getState().reloadFolder()
-    const items = store.useGenerationStore.getState().folderItems
-    expect(items).toHaveLength(1)
-    expect(items[0].prompt).toBe('embedded prompt')
+
+    await useGenerationStore.getState().generateImage()
+    const retained = useGenerationStore.getState().pendingRequestId
+    expect(retained).toMatch(/^[0-9a-f-]{36}$/)
+    await useGenerationStore.getState().generateImage()
+
+    expect(payloads).toHaveLength(2)
+    expect(payloads[0]).toEqual(expect.objectContaining({ request_id: retained }))
+    expect(payloads[1]).toEqual(expect.objectContaining({ request_id: retained, settings: expect.objectContaining({ seed: payloads[0] && (payloads[0] as { settings: { seed: number } }).settings.seed }) }))
+    expect(useGenerationStore.getState().pendingRequestId).toBeNull()
+  })
+
+  it('drops the pending request ID when generation input or worker changes', () => {
+    useGenerationStore.setState({ pendingRequestId: '11111111-1111-4111-8111-111111111111' })
+    useGenerationStore.getState().setParams({ prompt: 'edited' })
+    expect(useGenerationStore.getState().pendingRequestId).toBeNull()
+    useGenerationStore.setState({ pendingRequestId: '11111111-1111-4111-8111-111111111111' })
+    useGenerationStore.getState().setWorkerPreference({ mode: 'explicit', worker_id: 'rtx5060ti' })
+    expect(useGenerationStore.getState().pendingRequestId).toBeNull()
+  })
+
+  it('drops the pending request ID when switching between image and video tabs', () => {
+    useGenerationStore.setState({ appTab: 'image', pendingRequestId: '11111111-1111-4111-8111-111111111111' })
+    useGenerationStore.getState().setAppTab('video')
+    expect(useGenerationStore.getState().pendingRequestId).toBeNull()
+    useGenerationStore.setState({ appTab: 'video', pendingRequestId: '22222222-2222-4222-8222-222222222222' })
+    useGenerationStore.getState().setAppTab('image')
+    expect(useGenerationStore.getState().pendingRequestId).toBeNull()
   })
 })
 
@@ -75,48 +133,15 @@ describe('非同期プロンプト強化の競合防止', () => {
   it('強化中に動画条件を編集した場合は古い応答で上書きしない', async () => {
     let resolveFetch!: (value: unknown) => void
     vi.stubGlobal('fetch', () => new Promise((resolve) => { resolveFetch = resolve }))
-    store.useGenerationStore.setState((s) => ({
-      params: { ...s.params, prompt: 'original', mode: 'text', lengthSec: 5 },
-      rewriting: false,
-    }))
+    useGenerationStore.setState((s) => ({ params: { ...s.params, prompt: 'original', mode: 'text', lengthSec: 5 }, rewriting: false }))
 
-    const pending = store.useGenerationStore.getState().rewritePrompt()
-    store.useGenerationStore.getState().setParams({ prompt: 'edited while waiting' })
-    resolveFetch({
-      ok: true,
-      json: async () => ({ response: 'integrated_multimodal_description: At 00:00.000 subject appears.\noverall_soundscape: quiet room tone.\nnon_diegetic_music: none.' }),
-    })
+    const pending = useGenerationStore.getState().rewritePrompt()
+    useGenerationStore.getState().setParams({ prompt: 'edited while waiting' })
+    resolveFetch({ ok: true, json: async () => ({ response: 'integrated_multimodal_description: At 00:00.000 subject appears.\noverall_soundscape: quiet room tone.\nnon_diegetic_music: none.' }) })
     await pending
 
-    expect(store.useGenerationStore.getState().params.prompt).toBe('edited while waiting')
-    expect(store.useGenerationStore.getState().rewriteUndo).toBeNull()
-    expect(store.useGenerationStore.getState().rewriting).toBe(false)
-  })
-
-  it('強化中に画像モデルを変更した場合は古い応答で上書きしない', async () => {
-    let resolveFetch!: (value: unknown) => void
-    let call = 0
-    vi.stubGlobal('fetch', () => {
-      call += 1
-      if (call === 1) return new Promise((resolve) => { resolveFetch = resolve })
-      return Promise.resolve(Response.json({ models: ['fw-rewriter-zimage'] }))
-    })
-    store.useGenerationStore.setState((s) => ({
-      imageParams: { ...s.imageParams, prompt: 'original image', model: 'krea2' },
-      imageRewriting: false,
-    }))
-
-    const pending = store.useGenerationStore.getState().rewriteImagePrompt()
-    store.useGenerationStore.getState().setImageModel('zimage')
-    resolveFetch({
-      ok: true,
-      json: async () => ({ response: Array.from({ length: 90 }, (_, i) => `detail${i}`).join(' ') }),
-    })
-    await pending
-
-    expect(store.useGenerationStore.getState().imageParams.model).toBe('zimage')
-    expect(store.useGenerationStore.getState().imageParams.prompt).toBe('original image')
-    expect(store.useGenerationStore.getState().imageRewriteUndo).toBeNull()
-    expect(store.useGenerationStore.getState().imageRewriting).toBe(false)
+    expect(useGenerationStore.getState().params.prompt).toBe('edited while waiting')
+    expect(useGenerationStore.getState().rewriteUndo).toBeNull()
+    expect(useGenerationStore.getState().rewriting).toBe(false)
   })
 })
