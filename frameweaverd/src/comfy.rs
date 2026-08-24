@@ -27,6 +27,12 @@ impl fmt::Display for ComfySubmitError {
 }
 impl Error for ComfySubmitError {}
 
+impl ComfySubmitError {
+    pub fn is_known_rejection(&self) -> bool {
+        self.status.is_client_error() && self.status != reqwest::StatusCode::REQUEST_TIMEOUT
+    }
+}
+
 const SUBMIT_TIMEOUT: Duration = Duration::from_secs(30);
 const RECONCILE_TIMEOUT: Duration = Duration::from_secs(2);
 const CANCEL_TIMEOUT: Duration = Duration::from_secs(10);

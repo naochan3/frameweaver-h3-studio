@@ -711,24 +711,24 @@ async fn jobs_api_hides_other_owners_jobs_and_rejects_invalid_headers_and_oversi
 }
 
 #[tokio::test]
-async fn jobs_api_marks_submission_failure_and_absent_recovery_jobs_orphaned() {
+async fn jobs_api_keeps_uncertain_submission_queued_and_orphans_absent_recovery_jobs() {
     let (comfy_address, comfy_state, comfy_server) = mock_comfy().await;
     let (api_url, repository, api_server) = api_server(comfy_address).await;
     let owner_a = owner();
     let client = reqwest::Client::new();
 
     comfy_state.reject_submissions.store(true, Ordering::SeqCst);
-    let failed = client
+    let uncertain = client
         .post(format!("{api_url}/api/jobs"))
         .header("X-FrameWeaver-Owner", &owner_a)
         .json(&job_request())
         .send()
         .await
         .unwrap();
-    assert_eq!(failed.status(), StatusCode::BAD_GATEWAY);
+    assert_eq!(uncertain.status(), StatusCode::ACCEPTED);
     let submitted = repository.list_for_owner(&owner_a, 10).await.unwrap();
     assert_eq!(submitted.len(), 1);
-    assert_eq!(submitted[0].status, JobStatus::Failed);
+    assert_eq!(submitted[0].status, JobStatus::Queued);
 
     let queued = repository
         .create(NewJob {

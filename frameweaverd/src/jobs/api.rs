@@ -16,7 +16,7 @@ use uuid::Uuid;
 
 use crate::{
     auth::AuthenticatedIdentity,
-    comfy::{ComfyApi, RemoteJob, RemoteJobStatus, flatten_media_outputs},
+    comfy::{ComfyApi, ComfySubmitError, RemoteJob, RemoteJobStatus, flatten_media_outputs},
     events::OperationEvent,
     jobs::{Job, JobRepository, JobStatus, NewJob},
     workers::{
@@ -264,6 +264,17 @@ async fn create_job(
         if let Ok(Some(_)) = comfy.get_job(&job.id).await {
             let reconciled = reconcile_job(&state, job).await?;
             return Ok((StatusCode::ACCEPTED, Json(reconciled)));
+        }
+        if !error
+            .downcast_ref::<ComfySubmitError>()
+            .is_some_and(ComfySubmitError::is_known_rejection)
+        {
+            OperationEvent::new("job_submit", "submit_unknown", started.elapsed())
+                .job_id(&job.id)
+                .owner_id(&owner_id)
+                .transition("new", "queued")
+                .warn();
+            return Ok((StatusCode::ACCEPTED, Json(job)));
         }
         state
             .repository
