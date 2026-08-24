@@ -37,7 +37,7 @@ export function RecipePanel() {
   }
 
   return (
-    <section className="rounded-2xl bg-white p-5 shadow-sm">
+    <section className="rounded-2xl bg-surface p-5 shadow-sm">
       <div className="mb-4 flex items-start justify-between">
         <div>
           <p className="text-[10px] font-bold tracking-[0.2em] text-accent-500">RECIPE</p>
@@ -75,7 +75,7 @@ export function RecipePanel() {
             onChange={(e) => setParams({ nsfw: e.target.checked })}
             className="peer sr-only"
           />
-          <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${params.nsfw ? 'left-[22px]' : 'left-0.5'}`} />
+          <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-surface shadow transition-all ${params.nsfw ? 'left-[22px]' : 'left-0.5'}`} />
         </div>
       </label>
 
@@ -88,7 +88,7 @@ export function RecipePanel() {
                 key={a}
                 onClick={() => applyResolution(a, mp)}
                 className={`flex-1 rounded-lg border px-1 py-2 text-xs font-bold transition-colors ${
-                  aspect === a ? 'border-accent-500 bg-orange-50 text-accent-600' : 'border-cream-200 text-ink-600 hover:border-accent-400'
+                  aspect === a ? 'border-accent-500 bg-accent-50 text-accent-600' : 'border-cream-200 text-ink-600 hover:border-accent-400'
                 }`}
               >
                 {a}
@@ -231,7 +231,7 @@ export function RecipePanel() {
               title={seedRandom ? 'ランダムON(押すと固定に切替)' : 'ランダムOFF(押すと毎回ランダムに切替)'}
             >
               <span className={`relative h-5 w-9 rounded-full transition-colors ${seedRandom ? 'bg-accent-500' : 'bg-cream-200'}`}>
-                <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${seedRandom ? 'left-[18px]' : 'left-0.5'}`} />
+                <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-surface shadow transition-all ${seedRandom ? 'left-[18px]' : 'left-0.5'}`} />
               </span>
               ランダム
             </button>

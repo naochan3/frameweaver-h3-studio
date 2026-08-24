@@ -87,7 +87,7 @@ export function ImageStudio() {
   return (
     <div className="space-y-4">
       {/* SCENE */}
-      <section className="rounded-2xl bg-white p-5 shadow-sm">
+      <section className="rounded-2xl bg-surface p-5 shadow-sm">
         <div className="mb-3 flex items-baseline justify-between">
           <div>
             <p className="text-[10px] font-bold tracking-[0.2em] text-accent-500">SCENE</p>
@@ -108,7 +108,7 @@ export function ImageStudio() {
                 type="button"
                 onClick={() => void rewriteImagePrompt()}
                 disabled={imageRewriting || !imageParams.prompt.trim()}
-                className="rounded-lg border border-accent-300 bg-white px-3 py-1.5 text-xs font-bold text-accent-600 hover:bg-accent-50 disabled:opacity-50"
+                className="rounded-lg border border-accent-300 bg-surface px-3 py-1.5 text-xs font-bold text-accent-600 hover:bg-accent-50 disabled:opacity-50"
                 title={`一言を${imageParams.model === 'krea2' ? 'Krea 2' : 'Z-Image'}の公式仕様に沿った本番プロンプトに自動変換します`}
               >
                 {imageRewriting ? '強化中…' : `プロンプト自動強化(${imageParams.model === 'krea2' ? 'Krea 2' : 'Z-Image'})`}
@@ -140,14 +140,14 @@ export function ImageStudio() {
                 type="button"
                 onClick={() => (imagePromptJa === null ? void translateImagePrompt() : clearImagePromptJa())}
                 disabled={imageTranslating}
-                className="rounded-lg border border-cream-200 bg-white px-2.5 py-1 text-xs font-semibold text-ink-600 hover:bg-cream-100 disabled:opacity-50"
+                className="rounded-lg border border-cream-200 bg-surface px-2.5 py-1 text-xs font-semibold text-ink-600 hover:bg-cream-100 disabled:opacity-50"
               >
                 {imageTranslating ? '訳しています…' : imagePromptJa === null ? '日本語で内容を見る' : '日本語表示を閉じる'}
               </button>
             </div>
 
             {imagePromptJa !== null && (
-              <p className="whitespace-pre-wrap rounded-lg border border-cream-200 bg-white p-2 text-xs leading-relaxed text-ink-700">
+              <p className="whitespace-pre-wrap rounded-lg border border-cream-200 bg-surface p-2 text-xs leading-relaxed text-ink-700">
                 {imagePromptJa || '(訳が空でした)'}
               </p>
             )}
@@ -161,7 +161,7 @@ export function ImageStudio() {
                       key={h.label}
                       type="button"
                       onClick={() => setRefineText((t) => appendHint(t, h.phrase))}
-                      className="rounded-full border border-cream-200 bg-white px-2 py-0.5 text-[11px] text-ink-600 hover:border-accent-400 hover:text-accent-600"
+                      className="rounded-full border border-cream-200 bg-surface px-2 py-0.5 text-[11px] text-ink-600 hover:border-accent-400 hover:text-accent-600"
                       title={h.phrase}
                     >
                       {h.label}
@@ -175,7 +175,7 @@ export function ImageStudio() {
                 value={refineText}
                 onChange={(e) => setRefineText(e.target.value)}
                 placeholder="日本語で修正指示(上の軸をタップで追加、自由入力も可)"
-                className="h-14 flex-1 resize-y rounded-lg border border-cream-200 bg-white p-2 text-xs outline-none focus:border-accent-400"
+                className="h-14 flex-1 resize-y rounded-lg border border-cream-200 bg-surface p-2 text-xs outline-none focus:border-accent-400"
               />
               <button
                 type="button"
@@ -197,7 +197,7 @@ export function ImageStudio() {
       </section>
 
       {/* RECIPE */}
-      <section className="rounded-2xl bg-white p-5 shadow-sm">
+      <section className="rounded-2xl bg-surface p-5 shadow-sm">
         <div className="mb-4 flex items-start justify-between">
           <div>
             <p className="text-[10px] font-bold tracking-[0.2em] text-accent-500">RECIPE</p>
@@ -221,7 +221,7 @@ export function ImageStudio() {
                 key={m.key}
                 onClick={() => switchModel(m.key)}
                 className={`rounded-xl border-2 p-3 text-left transition-colors ${
-                  active ? 'border-accent-500 bg-orange-50' : 'border-cream-200 hover:border-accent-400'
+                  active ? 'border-accent-500 bg-accent-50' : 'border-cream-200 hover:border-accent-400'
                 }`}
               >
                 <span className="flex flex-wrap items-center justify-between gap-1">
@@ -240,7 +240,7 @@ export function ImageStudio() {
               <p className="font-bold text-amber-700">⚠ キャラは英語のDanbooruタグで入力してください</p>
               <p className="mt-1 leading-relaxed">
                 日本語名(例「ロキシー」)や自然文では<b>別人</b>になります。英語の公式タグが必要です。
-                作品名を <code className="rounded bg-white px-1">\(series\)</code> の形で添えると精度が上がります。
+                作品名を <code className="rounded bg-surface px-1">\(series\)</code> の形で添えると精度が上がります。
               </p>
               <p className="mt-1.5 font-semibold">検証済みの例(クリックで挿入):</p>
               <div className="mt-1 flex flex-wrap gap-1.5">
@@ -249,7 +249,7 @@ export function ImageStudio() {
                     key={t}
                     type="button"
                     onClick={() => appendToPrompt(t)}
-                    className="rounded-full border border-accent-300 bg-white px-2.5 py-1 font-mono text-[11px] text-accent-600 hover:bg-accent-50"
+                    className="rounded-full border border-accent-300 bg-surface px-2.5 py-1 font-mono text-[11px] text-accent-600 hover:bg-accent-50"
                   >
                     + {t}
                   </button>
@@ -260,7 +260,7 @@ export function ImageStudio() {
                 <button
                   type="button"
                   onClick={() => appendToPrompt('masterpiece, best quality, amazing quality, very aesthetic')}
-                  className="ml-1 rounded border border-cream-300 bg-white px-2 py-0.5 font-semibold text-ink-600 hover:bg-cream-100"
+                  className="ml-1 rounded border border-cream-300 bg-surface px-2 py-0.5 font-semibold text-ink-600 hover:bg-cream-100"
                 >
                   + 品質タグを先頭級に追加
                 </button>
@@ -272,7 +272,7 @@ export function ImageStudio() {
                 <select
                   value={imageParams.animeCheckpoint || ''}
                   onChange={(e) => setImageParams({ animeCheckpoint: e.target.value })}
-                  className="mt-1 w-full rounded-lg border border-cream-200 bg-white p-2 text-sm font-normal"
+                  className="mt-1 w-full rounded-lg border border-cream-200 bg-surface p-2 text-sm font-normal"
                 >
                   <option value="">おすすめ(WAI・自動)</option>
                   {animeCheckpoints(checkpointList).map((c) => (
@@ -295,7 +295,7 @@ export function ImageStudio() {
                 value={imageParams.negativePrompt ?? ''}
                 onChange={(e) => setImageParams({ negativePrompt: e.target.value })}
                 placeholder="除外したい要素。空でも可"
-                className="mt-1 h-16 w-full resize-y rounded-lg border border-cream-200 bg-white p-2 text-sm font-normal leading-relaxed"
+                className="mt-1 h-16 w-full resize-y rounded-lg border border-cream-200 bg-surface p-2 text-sm font-normal leading-relaxed"
               />
             </label>
 
@@ -323,7 +323,7 @@ export function ImageStudio() {
                   key={a}
                   onClick={() => applyResolution(a, mp)}
                   className={`flex-1 rounded-lg border px-1 py-2 text-xs font-bold transition-colors ${
-                    aspect === a ? 'border-accent-500 bg-orange-50 text-accent-600' : 'border-cream-200 text-ink-600 hover:border-accent-400'
+                    aspect === a ? 'border-accent-500 bg-accent-50 text-accent-600' : 'border-cream-200 text-ink-600 hover:border-accent-400'
                   }`}
                 >
                   {a}
@@ -364,7 +364,7 @@ export function ImageStudio() {
               <button
                 type="button"
                 onClick={() => setLoraCatalogOpen(true)}
-                className="rounded-lg border border-accent-300 bg-white px-2.5 py-1 text-xs font-bold text-accent-600 hover:bg-accent-50"
+                className="rounded-lg border border-accent-300 bg-surface px-2.5 py-1 text-xs font-bold text-accent-600 hover:bg-accent-50"
               >
                 LoRAカタログを開く(画像で選ぶ)
               </button>
@@ -423,7 +423,7 @@ export function ImageStudio() {
           </label>
 
           {selectedLoraMeta && (
-            <div className="sm:col-span-2 rounded-xl border border-accent-200 bg-orange-50/60 p-3 text-xs">
+            <div className="sm:col-span-2 rounded-xl border border-accent-200 bg-accent-50/60 p-3 text-xs">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="font-bold text-ink-900">{selectedLoraMeta.name}</p>
@@ -432,7 +432,7 @@ export function ImageStudio() {
                     {selectedLoraMeta.nsfw && <span className="ml-1 rounded bg-pink-100 px-1 font-bold text-pink-600">NSFW</span>}
                   </p>
                 </div>
-                <a href={selectedLoraMeta.url} target="_blank" rel="noreferrer" className="shrink-0 rounded border border-cream-200 bg-white px-2 py-0.5 font-semibold text-ink-600 hover:bg-cream-100">
+                <a href={selectedLoraMeta.url} target="_blank" rel="noreferrer" className="shrink-0 rounded border border-cream-200 bg-surface px-2 py-0.5 font-semibold text-ink-600 hover:bg-cream-100">
                   Civitai ↗
                 </a>
               </div>
@@ -441,12 +441,12 @@ export function ImageStudio() {
                   <span className="font-semibold text-ink-600">トリガー(入れないと効きません):</span>
                   <div className="mt-1 flex flex-wrap items-center gap-1.5">
                     {selectedLoraMeta.triggers.map((t) => (
-                      <code key={t} className="rounded bg-white px-1.5 py-0.5 font-mono text-[11px] text-accent-600">{t}</code>
+                      <code key={t} className="rounded bg-surface px-1.5 py-0.5 font-mono text-[11px] text-accent-600">{t}</code>
                     ))}
                     <button
                       type="button"
                       onClick={() => appendToPrompt(selectedLoraMeta.triggers.join(', '))}
-                      className="rounded-full border border-accent-300 bg-white px-2.5 py-1 font-semibold text-accent-600 hover:bg-accent-50"
+                      className="rounded-full border border-accent-300 bg-surface px-2.5 py-1 font-semibold text-accent-600 hover:bg-accent-50"
                     >
                       + プロンプトに挿入
                     </button>
@@ -482,7 +482,7 @@ export function ImageStudio() {
                 title={seedRandom ? 'ランダムON(押すと固定に切替)' : 'ランダムOFF(押すと毎回ランダムに切替)'}
               >
                 <span className={`relative h-5 w-9 rounded-full transition-colors ${seedRandom ? 'bg-accent-500' : 'bg-cream-200'}`}>
-                  <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${seedRandom ? 'left-[18px]' : 'left-0.5'}`} />
+                  <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-surface shadow transition-all ${seedRandom ? 'left-[18px]' : 'left-0.5'}`} />
                 </span>
                 ランダム
               </button>

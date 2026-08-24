@@ -10,7 +10,7 @@ export function AppTabs() {
   ]
 
   return (
-    <nav className="flex gap-1 rounded-2xl bg-white p-1.5 shadow-sm">
+    <nav className="flex gap-1 rounded-2xl bg-surface p-1.5 shadow-sm">
       {tabs.map((t) => {
         const active = appTab === t.key
         return (
@@ -18,7 +18,7 @@ export function AppTabs() {
             key={t.key}
             onClick={() => setAppTab(t.key)}
             className={`flex flex-1 flex-col items-center justify-center gap-0 rounded-xl px-2 py-2 transition-all duration-300 sm:flex-row sm:gap-2 sm:px-4 sm:py-2.5 ${
-              active ? 'bg-ink-900 text-white shadow' : 'text-ink-600 hover:bg-cream-100'
+              active ? 'bg-onsurface text-white shadow' : 'text-ink-600 hover:bg-cream-100'
             }`}
           >
             <span className="whitespace-nowrap text-sm font-bold">{t.label}</span>

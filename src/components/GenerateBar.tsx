@@ -30,7 +30,7 @@ export function GenerateBar() {
       : 'この内容で画像を生成'
 
   return (
-    <div className="sticky bottom-0 z-30 border-t border-cream-200 bg-white/90 px-4 py-3 backdrop-blur">
+    <div className="sticky bottom-0 z-30 border-t border-cream-200 bg-surface/90 px-4 py-3 backdrop-blur">
       <div className="mx-auto flex max-w-[1600px] items-center gap-4">
         <div className="min-w-0 flex-1">
           <p className="truncate text-xs text-ink-600">

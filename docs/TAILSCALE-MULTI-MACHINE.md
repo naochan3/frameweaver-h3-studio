@@ -48,7 +48,10 @@ Tailscaleへログイン済みのホストPCで実行します。
 tailnetだけに限定したい場合は、WebUIをloopback待受で起動します（通常の `npm run dev` はLANからも接続できる設定です）。
 
 ```powershell
-npm run dev -- --host 127.0.0.1
+Get-NetTCPConnection -LocalPort 5180 -ErrorAction SilentlyContinue |
+  Select-Object -ExpandProperty OwningProcess -Unique |
+  ForEach-Object { Stop-Process -Id $_ -Force }
+npm run dev -- --host 127.0.0.1 --port 5180 --strictPort
 ```
 
 ```powershell

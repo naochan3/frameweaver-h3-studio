@@ -58,7 +58,7 @@ export function LoraCatalog() {
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-black/50 p-2 sm:p-4" onClick={() => setOpen(false)}>
       <div
-        className="mx-auto flex h-full w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+        className="mx-auto flex h-full w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-surface shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* ヘッダー */}
@@ -105,7 +105,7 @@ export function LoraCatalog() {
         ) : (
           <div className="grid flex-1 auto-rows-max grid-cols-2 content-start gap-3 overflow-y-auto p-3 sm:grid-cols-3 lg:grid-cols-4">
             {filtered.map(([key, v]) => (
-              <div key={key} className="flex flex-col overflow-hidden rounded-xl border border-cream-200 bg-white">
+              <div key={key} className="flex flex-col overflow-hidden rounded-xl border border-cream-200 bg-surface">
                 <div className="relative h-44 shrink-0 overflow-hidden bg-cream-100 sm:h-52">
                   {v.image ? (
                     <img

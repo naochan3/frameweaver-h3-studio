@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "docs:verify": "node scripts/verify-readme-assets.mjs",
+    "docs:verify": "node scripts/verify-readme-assets.mjs && node scripts/verify-tailscale-serve.mjs",
     "smoke:runtime": "node scripts/verify-runtime.mjs",
     "lint": "oxlint",
     "test": "vitest run",

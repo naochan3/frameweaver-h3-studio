@@ -36,7 +36,7 @@ export function SourcePanel() {
       : `${SLOT_LABEL[mode]?.join('と') ?? '画像'}を追加してください。`
 
   return (
-    <section className="rounded-2xl bg-white p-5 shadow-sm">
+    <section className="rounded-2xl bg-surface p-5 shadow-sm">
       <div className="mb-3 flex items-baseline justify-between">
         <div>
           <p className="text-[10px] font-bold tracking-[0.2em] text-accent-500">SOURCE</p>
@@ -72,7 +72,7 @@ export function SourcePanel() {
             onDragLeave={() => setDragging(false)}
             onDrop={onDrop}
             className={`flex h-28 w-44 flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed text-xs transition-colors ${
-              dragging ? 'border-accent-500 bg-orange-50 text-accent-600' : 'border-cream-200 text-ink-400 hover:border-accent-400'
+              dragging ? 'border-accent-500 bg-accent-50 text-accent-600' : 'border-cream-200 text-ink-400 hover:border-accent-400'
             }`}
           >
             <span className="text-2xl leading-none">+</span>

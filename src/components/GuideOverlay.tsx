@@ -41,7 +41,7 @@ function DemoNsfw() {
     <div className="flex items-center justify-center gap-3 rounded-xl border-2 border-pink-200 bg-pink-50 p-3">
       <span className="text-xs font-bold text-pink-600">NSFW モード</span>
       <div className="guide-toggle relative h-6 w-11 rounded-full bg-cream-200">
-        <span className="guide-toggle-knob absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow" />
+        <span className="guide-toggle-knob absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-surface shadow" />
       </div>
     </div>
   )
@@ -85,7 +85,7 @@ const STEPS: GuideStep[] = [
     body: '上部のタブで「動画生成(MiniMax H3)」と「画像生成(Krea 2 / Z-Image)」を切り替えて使います。どちらも 左でつくる → 右で見る の同じ流れです。',
     demo: (
       <div className="flex gap-1 rounded-2xl bg-cream-100 p-1.5">
-        <span className="guide-tab flex-1 rounded-xl bg-ink-900 px-3 py-2 text-center text-xs font-bold text-white">動画生成</span>
+        <span className="guide-tab flex-1 rounded-xl bg-onsurface px-3 py-2 text-center text-xs font-bold text-white">動画生成</span>
         <span className="guide-tab flex-1 rounded-xl px-3 py-2 text-center text-xs font-bold text-ink-600" style={{ animationDelay: '1s' }}>画像生成</span>
       </div>
     ),
@@ -150,7 +150,7 @@ export function GuideOverlay() {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setGuideOpen(false)}>
       <div
         key={step}
-        className="guide-panel w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl"
+        className="guide-panel w-full max-w-lg rounded-2xl bg-surface p-6 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <p className="text-[10px] font-bold tracking-[0.2em] text-accent-500">

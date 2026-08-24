@@ -22,7 +22,7 @@ export function Header() {
   const connectionDot = !connected ? 'bg-red-400' : wsConnected ? 'bg-green-500' : 'bg-amber-400'
 
   return (
-    <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-cream-200 bg-white px-3 py-2 sm:gap-4 sm:px-5 sm:py-3">
+    <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-cream-200 bg-surface px-3 py-2 sm:gap-4 sm:px-5 sm:py-3">
       <div className="flex items-center gap-2">
         <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-500 font-bold text-white sm:h-8 sm:w-8">F</span>
         <h1 className="text-base font-bold tracking-tight sm:text-lg">FrameWeaver H3 Studio</h1>
@@ -79,7 +79,7 @@ export function Header() {
         </button>
         <button
           onClick={() => setGuideOpen(true)}
-          className="rounded-lg border border-accent-400 bg-orange-50 px-2.5 py-1.5 text-xs font-semibold text-accent-600 hover:bg-orange-100"
+          className="rounded-lg border border-accent-400 bg-accent-50 px-2.5 py-1.5 text-xs font-semibold text-accent-600 hover:bg-accent-200"
         >
           使い方
         </button>

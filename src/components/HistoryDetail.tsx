@@ -69,7 +69,7 @@ export function HistoryDetail() {
     <>
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={closeDetail}>
       <div
-        className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl md:flex-row"
+        className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-surface shadow-2xl md:flex-row"
         onClick={(e) => e.stopPropagation()}
       >
         {/* メディア(モバイルは高さを抑えて詳細も見えるように) */}
@@ -140,7 +140,7 @@ export function HistoryDetail() {
               {item.prompt}
             </p>
             {showJa && (
-              <div className="mt-1.5 rounded-lg border border-accent-200 bg-orange-50/60 p-3">
+              <div className="mt-1.5 rounded-lg border border-accent-200 bg-accent-50/60 p-3">
                 <p className="mb-1 text-[10px] font-bold tracking-wider text-accent-500">和訳(レビュー用)</p>
                 <p className="max-h-40 overflow-y-auto whitespace-pre-wrap text-sm leading-relaxed text-ink-700">{jaText}</p>
               </div>
@@ -181,7 +181,7 @@ export function HistoryDetail() {
             {item.kind === 'image' && (
               <button
                 onClick={() => void sendImageToSource(item.videoUrl)}
-                className="rounded-lg bg-ink-900 px-4 py-2 text-sm font-bold text-white hover:bg-ink-600"
+                className="rounded-lg bg-onsurface px-4 py-2 text-sm font-bold text-white hover:opacity-90"
               >
                 動画の素材にする →
               </button>
@@ -235,7 +235,7 @@ export function HistoryDetail() {
         />
         <button
           onClick={() => setZoomed(false)}
-          className="absolute right-4 top-4 rounded-lg bg-white/90 px-3 py-1.5 text-sm font-semibold text-ink-900 hover:bg-white"
+          className="absolute right-4 top-4 rounded-lg bg-surface/90 px-3 py-1.5 text-sm font-semibold text-ink-900 hover:bg-surface"
         >
           閉じる
         </button>
