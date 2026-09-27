@@ -8,14 +8,12 @@ ComfyUI をバックエンドに、複数のAIモデルを1つのWebUIから使�
 | 種類 | モデル | 特徴 |
 |---|---|---|
 | **動画+音声** | MiniMax H3 | Text / First / First+Last / Last / Reference の5モード。映像と音声を同時生成 |
-| 動画NSFW | 10Eros-Max(H3融合) | H3を差し替えるNSFW寄り動画モデル(任意) |
 | **画像・万能** | Z-Image Turbo | アニメ〜実写。約10秒/枚 |
 | **画像・実写** | Krea 2 Turbo | iPhone写真風の自然な人物 |
-| **画像・アニメ** | WAI / NoobAI(Illustrious系SDXL) | **キャラ名(英語Danbooruタグ)でNSFWアニメ**。ネガティブ+cfg有効 |
+| **画像・アニメ** | WAI / NoobAI(Illustrious系SDXL) | **キャラ名(英語Danbooruタグ)で描ける**。ネガティブ+cfg有効 |
 | **プロンプト強化** | ローカルLLM(Ollama) | 一言→本番プロンプトに自動変換(動画=H3公式仕様 / 画像=各モデル公式仕様準拠) |
 | **LoRAカタログ** | 200+ LoRA | サムネ画像+ジャンル+トリガーで選ぶ。「使う」で対象モデル自動切替 |
 
-- 画像生成は**検閲ノードが無く、素でNSFW対応**(Z-Image/Krea2)
 - Turbo LoRA高速化、進捗+残り時間表示、生成履歴、使い方ガイド内蔵、LAN内のスマホから利用可
 
 ---
@@ -77,7 +75,7 @@ ollama create fw-rewriter-krea2  -f docs/ollama/Modelfile.krea2
 ollama create fw-rewriter-zimage -f docs/ollama/Modelfile.zimage
 ```
 
-3つのModelfileには各モデルの**公式プロンプト仕様**(H3の3ブロック形式 / Krea公式 expansion.txt / Z-Image公式ガイド)を焼き込んである。NSFW対応のため無検閲LLM(abliterate)をエンジンに使用。
+3つのModelfileには各モデルの**公式プロンプト仕様**(H3の3ブロック形式 / Krea公式 expansion.txt / Z-Image公式ガイド)を焼き込んである。
 
 ### 6. 起動
 
@@ -144,17 +142,9 @@ WebUIは `0.0.0.0` 待受。同じネットワークの端末から `http://<PC�
 | `minimax_h3_fl2va_pruned_int8_convrot.safetensors`(約21GB) | diffusion_models/ | Comfy-Org/MiniMax-H3 |
 | `minimax_h3_ref2va_pruned_int8_convrot.safetensors`(約21GB) | diffusion_models/ | 同上 |
 | `qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors`(通常エンコーダ・15.7GB) | text_encoders/ | 同上 |
-| `qwen3vl_32b_heretic_minimax_h3_nvfp4.safetensors`(**NSFW用**・15.7GB) | text_encoders/ | Momoking/...Heretic-MiniMax-H3-NVFP4 |
 | `minimax_h3_video_vae_fp16.safetensors` / `minimax_h3_audio_vae_fp32.safetensors` | vae/ | Comfy-Org/MiniMax-H3 |
 | `minimax_h3_fl2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors`(既定Turbo) | loras/ | lightx2v |
 | `minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors`(Reference用Turbo) | loras/ | lightx2v |
-
-### 動画NSFW(任意): 10Eros-Max
-
-| ファイル(各約20GB) | 配置 | 出典 |
-|---|---|---|
-| `10Eros_Max_h3_fl2va_beta2_pruned_int8_convrot.safetensors` | diffusion_models/ | cicalooo/10Eros-Max-h3-int8-convrot |
-| `10Eros_Max_h3_ref2va_beta2_pruned_int8_convrot.safetensors` | diffusion_models/ | 同上 |
 
 ### 画像
 
@@ -183,7 +173,7 @@ node scripts/fetch-loras.mjs
 
 - 429(レート制限)は自動バックオフ、既存ファイルはスキップ。収集対象は `scripts/fetch-loras.mjs` の `CURATED` / `QUERIES` で編集可。
 - 保存先は既定 `C:\AI\ComfyUI_Data\models\loras`(`LORA_DIR` で変更可)。
-- **トークンはコードに書かず環境変数のみ**。不要ジャンル(動物エロ等)は各自 `loras/_trash` へ退避してよい。未成年表現は扱わない。
+- **トークンはコードに書かず環境変数のみ**。不要な LoRA は各自 `loras/_trash` へ退避してよい。
 
 ### プロンプト強化(Ollama)
 
@@ -205,7 +195,7 @@ Modelfileは `docs/ollama/`。作成コマンドは上記「セットアップ 5
 
 1. 「動画生成」タブ → モード(Text/First/First+Last/Last/Reference)
 2. SCENE に一言 → **「プロンプト自動強化」**で本番プロンプトへ(任意)。First系/Referenceは画像をドラッグ&ドロップ
-3. RECIPE でアスペクト比×画質・長さ・Turbo・**NSFWトグル**・シード → 生成
+3. RECIPE でアスペクト比×画質・長さ・Turbo・シード → 生成
 4. 右OUTPUTに進捗・残り時間・完成動画。履歴から過去分も開ける
 
 ### 画像生成
@@ -215,15 +205,13 @@ Modelfileは `docs/ollama/`。作成コマンドは上記「セットアップ 5
 3. アスペクト比×画質 → 生成。できた画像は動画のFirst/Referenceに流用可
 4. **LoRAカタログ**からサムネで選び「使う」で即設定(対象モデルに自動切替+トリガー挿入)
 
-### NSFW
+### 生成物の扱い
 
-- **画像(Z-Image/Krea2/アニメ)は素でNSFW対応**(検閲ノードなし)。プロンプトにそのまま書けば出る
-- **動画はRECIPEのNSFWトグル**でエンコーダを無検閲版(Heretic)に切替。切替直後の1回目は再読込で+1〜2分
-- 未成年表現は絶対に不可。生成物の公開・商用は自己責任(H3ライセンスのセーフガード条項に注意)
+- 生成物の公開・商用は各モデルのライセンスに従う(H3 はライセンスのセーフガード条項に注意)
 
 ### プロンプト自動強化のしくみ
 
-一言(日本語OK)を、ローカルLLMが**各モデルの公式プロンプト仕様に沿って**本番プロンプトへ変換する。翻訳ではなく、カメラ・光・質感・構図・音などを補って**膨らませる**。動画はwarm約20秒、画像はwarm約2秒。出力は英語。NSFWも検閲しない。気に入らなければ「元に戻す」。
+一言(日本語OK)を、ローカルLLMが**各モデルの公式プロンプト仕様に沿って**本番プロンプトへ変換する。翻訳ではなく、カメラ・光・質感・構図・音などを補って**膨らませる**。動画はwarm約20秒、画像はwarm約2秒。出力は英語。気に入らなければ「元に戻す」。
 
 ---
 
@@ -253,7 +241,6 @@ Modelfileは `docs/ollama/`。作成コマンドは上記「セットアップ 5
 | 生成が途中から極端に遅い | RAM逼迫→SSDスワップ | 解像度を下げる・重いアプリを閉じる・「解放」 |
 | プロンプト強化ボタンが出ない/効かない | Ollama未起動 or モデル未作成 | Ollama起動(`ollama serve`)+ 上記の `ollama create` 実行 |
 | アニメでキャラが別人 | 日本語名/自然文で入力 | **英語Danbooruタグ**で(例 `roxy migurdia \(mushoku tensei\)`) |
-| NSFW ONで動画が変わらない | エンコーダ未DL | text_encoders に heretic があるか |
 | LoRAカタログが空 | メタ未生成 | `loras/frameweaver_lora_meta.json` を用意(Civitai APIから生成) |
 
 ---
