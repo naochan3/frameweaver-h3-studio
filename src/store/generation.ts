@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { createAdaptivePoller, pollDelay } from '../lib/adaptive-poller'
 import { ComfyClient } from '../lib/comfy-client'
 import { DRAFT_KEYS, loadDraft, saveDraft } from '../lib/draft'
 import { pickHistoryMatch } from '../lib/history-match'
@@ -16,6 +17,7 @@ import {
   translatePromptToJa,
 } from '../lib/rewriter'
 import { patchWorkflow } from '../lib/workflow-patcher'
+import type { NodeCapabilitySnapshot } from '../lib/model-capability'
 import type { GenerationMode, GenerationParams, ImageModel, ImageParams, LoraMetaMap } from '../lib/types'
 
 // 既定は同一オリジンの /comfy(Viteプロキシ経由)。これによりPCでもLAN内の別端末でも
@@ -60,9 +62,13 @@ export interface HistoryItem {
 export type GenerationStatus = 'idle' | 'uploading' | 'queued' | 'running' | 'done' | 'error'
 
 interface GenerationState {
+  /** ComfyUI REST APIが応答しているか */
   connected: boolean
+  /** 生成進捗・完了通知を受け取るWebSocketが接続中か */
+  wsConnected: boolean
   queueRemaining: number
   vram: { total: number; free: number } | null
+  capability: NodeCapabilitySnapshot | null
   /** ComfyUI 上で選択可能な LoRA 一覧(追加LoRAの候補表示用) */
   loraList: string[]
   params: GenerationParams
@@ -142,6 +148,8 @@ interface GenerationState {
   setLoraCatalogOpen: (open: boolean) => void
   /** LoRAメタを再取得する(DL進行中に最新化) */
   refreshLoraMeta: () => Promise<void>
+  /** GPU・モデル在庫をComfyUIから再取得する */
+  refreshCapability: () => Promise<void>
   /** カタログからLoRAを選択: 対象モデルへ自動切替し、追加LoRAに設定する */
   applyLoraFromCatalog: (metaKey: string) => void
   setAppTab: (tab: 'video' | 'image') => void
@@ -206,8 +214,10 @@ export function imageSlots(mode: GenerationMode): [number, number] {
 
 export const useGenerationStore = create<GenerationState>((set, get) => ({
   connected: false,
+  wsConnected: false,
   queueRemaining: 0,
   vram: null,
+  capability: null,
   params: {
     mode: 'text',
     prompt: loadDraft(localStorage, DRAFT_KEYS.videoPrompt),
@@ -431,6 +441,21 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
     set({ loraMeta, loraList })
   },
 
+  refreshCapability: async () => {
+    const capability = await client.capabilities()
+    const primary = capability.devices.reduce<(typeof capability.devices)[number] | null>(
+      (best, device) => !best || device.vramTotal > best.vramTotal ? device : best,
+      null,
+    )
+    set({
+      capability,
+      connected: capability.status === 'ready' || capability.status === 'degraded',
+      ...(primary ? { vram: { total: primary.vramTotal, free: primary.vramFree } } : {}),
+      checkpointList: capability.inventory.checkpoints,
+      loraList: capability.inventory.loras,
+    })
+  },
+
   applyLoraFromCatalog: (metaKey) => {
     const { loraList } = get()
     // ComfyUIのLoRA名(Windowsは "\" 区切り)を、メタキー("/" 区切り)から解決
@@ -458,7 +483,7 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
   setImageParams: (patch) => set((s) => ({ imageParams: { ...s.imageParams, ...patch } })),
 
   setImageModel: (model) => {
-    set((s) => ({ imageParams: { ...s.imageParams, ...imageRecommendedParams(model) } }))
+    set((s) => ({ imageParams: { ...s.imageParams, ...imageRecommendedParams(model) }, imageRewriterAvailable: false }))
     void imageRewriterInstalled(model).then((ok) => {
       if (get().imageParams.model === model) set({ imageRewriterAvailable: ok })
     })
@@ -781,9 +806,8 @@ client.onEvent((ev) => {
   switch (ev.type) {
     case 'status':
       if (ev.message === 'connected') {
-        useGenerationStore.setState({ connected: true })
-        void client.getLoraList().then((loraList) => useGenerationStore.setState({ loraList }))
-        void client.getCheckpointList().then((checkpointList) => useGenerationStore.setState({ checkpointList }))
+        useGenerationStore.setState({ wsConnected: true })
+        void useGenerationStore.getState().refreshCapability()
         void client.getLoraMeta().then((loraMeta) => useGenerationStore.setState({ loraMeta }))
         void rewriterInstalled().then((ok) => useGenerationStore.setState({ rewriterAvailable: ok }))
         const imageModel = useGenerationStore.getState().imageParams.model
@@ -794,7 +818,7 @@ client.onEvent((ev) => {
         })
         void useGenerationStore.getState().reloadFolder()
       }
-      if (ev.message === 'disconnected') useGenerationStore.setState({ connected: false })
+      if (ev.message === 'disconnected') useGenerationStore.setState({ wsConnected: false })
       if (ev.queueRemaining !== undefined) useGenerationStore.setState({ queueRemaining: ev.queueRemaining })
       break
     case 'progress':
@@ -838,10 +862,37 @@ useGenerationStore.subscribe((s, prev) => {
   }
 })
 
-// VRAM 監視(5秒ポーリング)
-setInterval(async () => {
-  const stats = await client.systemStats()
-  if (stats) {
-    useGenerationStore.setState({ vram: { total: stats.vramTotal, free: stats.vramFree }, connected: true })
-  }
-}, 5000)
+// VRAMだけを軽量監視。モデル在庫は接続時または手動更新時に取得する。
+const vramPoller = createAdaptivePoller({
+  poll: async () => {
+    const stats = await client.systemStats()
+    if (stats) {
+      useGenerationStore.setState((state) => ({
+        vram: { total: stats.vramTotal, free: stats.vramFree },
+        connected: true,
+        capability: state.capability
+          ? {
+              ...state.capability,
+              capturedAt: new Date().toISOString(),
+              status: state.capability.errors.length > 0 ? 'degraded' : 'ready',
+              devices: state.capability.devices.length > 0
+                ? state.capability.devices.map((device, index) => index === 0
+                    ? { ...device, vramTotal: stats.vramTotal, vramFree: stats.vramFree }
+                    : device)
+                : state.capability.devices,
+            }
+          : null,
+      }))
+      return
+    }
+    useGenerationStore.setState((state) => ({
+      connected: false,
+      capability: state.capability ? { ...state.capability, status: 'stale' } : null,
+    }))
+  },
+  delay: () => pollDelay(
+    useGenerationStore.getState().status,
+    typeof document === 'undefined' ? 'visible' : document.visibilityState,
+  ),
+})
+vramPoller.start()

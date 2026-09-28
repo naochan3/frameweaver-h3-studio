@@ -84,12 +84,14 @@ export function createRewriterGateway(options: GatewayOptions = {}) {
     const raw = await request.arrayBuffer()
     if (raw.byteLength > requestBytes) return json(413, { error: 'request too large' })
 
-    let input: { model?: unknown; prompt?: unknown; options?: unknown }
+    let parsed: unknown
     try {
-      input = JSON.parse(new TextDecoder().decode(raw)) as typeof input
+      parsed = JSON.parse(new TextDecoder().decode(raw))
     } catch {
       return json(400, { error: 'invalid json' })
     }
+    if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') return json(400, { error: 'invalid json' })
+    const input = parsed as { model?: unknown; prompt?: unknown; options?: unknown }
     if (!exactModel(input.model)) return json(403, { error: 'model not allowed' })
     if (typeof input.prompt !== 'string' || input.prompt.trim().length === 0 || input.prompt.length > 8_000) {
       return json(400, { error: 'invalid prompt' })

@@ -13,11 +13,16 @@ const fakeLocalStorage = {
 
 class FakeWebSocket {
   static readonly OPEN = 1
+  static latest: FakeWebSocket | null = null
   readyState = 0
   binaryType = ''
-  onmessage: unknown = null
-  onclose: unknown = null
-  onopen: unknown = null
+  onmessage: ((event: MessageEvent) => void) | null = null
+  onclose: (() => void) | null = null
+  onopen: (() => void) | null = null
+
+  constructor() {
+    FakeWebSocket.latest = this
+  }
 }
 
 let store: typeof import('./generation')
@@ -56,6 +61,17 @@ describe('プロンプト下書きの永続化(store配線)', () => {
   })
 })
 
+describe('ComfyUI接続状態の分離', () => {
+  it('REST能力とWebSocketイベント経路を別々に表示できる', () => {
+    store.useGenerationStore.setState({ connected: true, wsConnected: false })
+    FakeWebSocket.latest?.onopen?.()
+    expect(store.useGenerationStore.getState()).toMatchObject({ connected: true, wsConnected: true })
+
+    FakeWebSocket.latest?.onclose?.()
+    expect(store.useGenerationStore.getState()).toMatchObject({ connected: true, wsConnected: false })
+  })
+})
+
 describe('RECENT のプロンプト補完(reloadFolder)', () => {
   it('localStorage履歴に無いファイルは埋め込みメタデータのプロンプトで補完する', async () => {
     vi.stubGlobal('fetch', async () => ({
@@ -72,6 +88,18 @@ describe('RECENT のプロンプト補完(reloadFolder)', () => {
 })
 
 describe('非同期プロンプト強化の競合防止', () => {
+  it('画像モデル切替直後は可用性確認が完了するまで強化を無効化する', () => {
+    vi.stubGlobal('fetch', () => new Promise(() => {}))
+    store.useGenerationStore.setState((s) => ({
+      imageParams: { ...s.imageParams, model: 'krea2' },
+      imageRewriterAvailable: true,
+    }))
+
+    store.useGenerationStore.getState().setImageModel('zimage')
+
+    expect(store.useGenerationStore.getState().imageRewriterAvailable).toBe(false)
+  })
+
   it('強化中に動画条件を編集した場合は古い応答で上書きしない', async () => {
     let resolveFetch!: (value: unknown) => void
     vi.stubGlobal('fetch', () => new Promise((resolve) => { resolveFetch = resolve }))
@@ -118,5 +146,52 @@ describe('非同期プロンプト強化の競合防止', () => {
     expect(store.useGenerationStore.getState().imageParams.prompt).toBe('original image')
     expect(store.useGenerationStore.getState().imageRewriteUndo).toBeNull()
     expect(store.useGenerationStore.getState().imageRewriting).toBe(false)
+  })
+})
+
+describe('ノード能力のストア配線', () => {
+  it('能力更新で全GPU在庫とprimary GPUのVRAMを反映する', async () => {
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith('/system_stats')) {
+        return Response.json({
+          devices: [
+            { name: 'cuda:0 Large', type: 'cuda', vram_total: 24_000, vram_free: 20_000 },
+            { name: 'cuda:1 Small', type: 'cuda', vram_total: 8_000, vram_free: 7_000 },
+          ],
+        })
+      }
+      const className = url.split('/').at(-1) ?? ''
+      const fields: Record<string, string> = {
+        CheckpointLoaderSimple: 'ckpt_name',
+        UNETLoader: 'unet_name',
+        CLIPLoader: 'clip_name',
+        VAELoader: 'vae_name',
+        LoraLoaderModelOnly: 'lora_name',
+      }
+      const field = fields[className]
+      return field
+        ? Response.json({ [className]: { input: { required: { [field]: [[`${className}.safetensors`]] } } } })
+        : new Response(null, { status: 404 })
+    })
+
+    await store.useGenerationStore.getState().refreshCapability()
+    const state = store.useGenerationStore.getState()
+
+    expect(state.capability?.devices).toHaveLength(2)
+    expect(state.capability?.status).toBe('ready')
+    expect(state.vram).toEqual({ total: 24_000, free: 20_000 })
+    expect(state.connected).toBe(true)
+  })
+
+  it('能力API停止時は古いconnectedを残さない', async () => {
+    vi.stubGlobal('fetch', async () => new Response(null, { status: 503 }))
+    store.useGenerationStore.setState({ connected: true })
+
+    await store.useGenerationStore.getState().refreshCapability()
+    const state = store.useGenerationStore.getState()
+
+    expect(state.capability?.status).toBe('unavailable')
+    expect(state.connected).toBe(false)
   })
 })

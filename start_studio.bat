@@ -5,7 +5,7 @@ REM  1) Ollama (プロンプト強化用LLM, 127.0.0.1:11434)
 REM  2) ComfyUI バックエンド (127.0.0.1:8189)
 REM  3) WebUI (http://localhost:5180)
 REM  4) ブラウザを開く
-REM すべて localhost バインドなのでファイアウォール許可は不要。
+REM ComfyUI/Ollamaはlocalhost限定。WebUIはLAN内端末向けに0.0.0.0で待受。
 REM ============================================================
 
 REM --- Ollama (未起動なら起動。プロンプト自動強化に使用) ---
