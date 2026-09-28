@@ -11,13 +11,15 @@ import { GuideOverlay } from './components/GuideOverlay'
 import { GenerateBar } from './components/GenerateBar'
 import { HistoryDetail } from './components/HistoryDetail'
 import { LoraCatalog } from './components/LoraCatalog'
+import { FleetPanel } from './components/FleetPanel'
 import { useGenerationStore } from './store/generation'
+import { AuthGate } from './components/AuthGate'
 
 export default function App() {
   const appTab = useGenerationStore((s) => s.appTab)
 
   return (
-    <div className="min-h-screen">
+    <AuthGate><div className="app-shell min-h-screen">
       <Header />
       <main className="mx-auto max-w-[1600px] space-y-4 p-4">
         <AppTabs />
@@ -39,6 +41,7 @@ export default function App() {
             <HistoryPanel />
           </div>
         </div>
+        <FleetPanel />
       </main>
       <GenerateBar />
       <footer className="py-3 text-center text-xs text-ink-400">
@@ -47,6 +50,6 @@ export default function App() {
       <GuideOverlay />
       <HistoryDetail />
       <LoraCatalog />
-    </div>
+    </div></AuthGate>
   )
 }

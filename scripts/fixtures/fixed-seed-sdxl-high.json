@@ -1,0 +1,9 @@
+{
+  "checkpoint": { "class_type": "CheckpointLoaderSimple", "inputs": { "ckpt_name": "RealVisXL_V5.0_fp16.safetensors" } },
+  "positive": { "class_type": "CLIPTextEncode", "inputs": { "text": "premium studio product photograph of a futuristic brushed aluminum camera, intricate precision details, flawless materials, dramatic softbox lighting, neutral seamless background, photorealistic, sharp focus, high dynamic range", "clip": ["checkpoint", 1] } },
+  "negative": { "class_type": "CLIPTextEncode", "inputs": { "text": "text, watermark, logo, malformed geometry, duplicated parts, blur, noise, low detail, oversaturated, cartoon", "clip": ["checkpoint", 1] } },
+  "latent": { "class_type": "EmptyLatentImage", "inputs": { "width": 1024, "height": 1536, "batch_size": 1 } },
+  "sampler": { "class_type": "KSampler", "inputs": { "model": ["checkpoint", 0], "positive": ["positive", 0], "negative": ["negative", 0], "latent_image": ["latent", 0], "seed": 424242, "steps": 40, "cfg": 6.0, "sampler_name": "dpmpp_2m", "scheduler": "karras", "denoise": 1.0 } },
+  "decode": { "class_type": "VAEDecode", "inputs": { "samples": ["sampler", 0], "vae": ["checkpoint", 2] } },
+  "save": { "class_type": "SaveImage", "inputs": { "images": ["decode", 0], "filename_prefix": "FrameWeaver/benchmark/fixed-sdxl-high" } }
+}

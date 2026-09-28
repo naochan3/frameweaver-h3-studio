@@ -126,11 +126,10 @@ const STEPS: GuideStep[] = [
   },
   {
     title: '困ったときは',
-    body: '生成を止めたいときはヘッダーの「停止」。VRAMが足りない挙動(極端に遅い等)のときは「解放」でモデルをアンロード。この案内はヘッダーの「使い方」からいつでも見られます。',
+    body: '生成を止めたいときはヘッダーの「停止」。VRAMが足りないときは解像度を下げるか、完了後に時間を置いてください。この案内はヘッダーの「使い方」からいつでも見られます。',
     demo: (
       <div className="flex justify-center gap-2">
         <span className="guide-card rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-xs font-bold text-red-600">■ 停止</span>
-        <span className="guide-card rounded-lg border border-cream-200 px-4 py-2 text-xs font-bold text-ink-600" style={{ animationDelay: '1s' }}>解放</span>
       </div>
     ),
   },

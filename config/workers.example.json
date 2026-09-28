@@ -1,0 +1,26 @@
+[
+  {
+    "id": "rtx4090",
+    "label": "RTX 4090",
+    "url": "http://127.0.0.1:8188/",
+    "capabilities": ["image", "video", "upscale", "llm"]
+  },
+  {
+    "id": "rtx5060ti",
+    "label": "RTX 5060 Ti",
+    "url": "https://rtx5060ti.tail37947a.ts.net:10100/",
+    "capabilities": ["image", "upscale", "llm"]
+  },
+  {
+    "id": "rtx3070",
+    "label": "RTX 3070",
+    "url": "https://nicolas2025.tail37947a.ts.net:10100/",
+    "capabilities": ["image", "upscale"]
+  },
+  {
+    "id": "rtx2070",
+    "label": "RTX 2070",
+    "url": "https://nicoyuri.tail37947a.ts.net:10100/",
+    "capabilities": ["image", "upscale"]
+  }
+]

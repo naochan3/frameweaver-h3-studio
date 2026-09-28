@@ -5,10 +5,17 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:api": "set \"FRAMEWEAVER_LISTEN_ADDR=127.0.0.1:5181\"&& cargo run --manifest-path frameweaverd/Cargo.toml",
     "build": "tsc -b && vite build",
+    "docs:verify": "node scripts/verify-readme-assets.mjs && node scripts/verify-tailscale-serve.mjs",
+    "smoke:runtime": "node scripts/verify-runtime.mjs",
     "lint": "oxlint",
     "test": "vitest run",
-    "preview": "vite preview"
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:all": "npm test && npm run lint && npm run build && npm run test:e2e",
+    "preview": "vite preview",
+    "serve": "npm run build && cargo run --manifest-path frameweaverd/Cargo.toml"
   },
   "dependencies": {
     "react": "^19.2.8",
@@ -16,11 +23,16 @@
     "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@playwright/test": "1.62.1",
     "@tailwindcss/vite": "^4.3.3",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.2",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.4",
+    "jsdom": "^30.0.1",
     "oxlint": "^1.75.0",
     "tailwindcss": "^4.3.3",
     "typescript": "~6.0.2",

@@ -1,32 +1,23 @@
-import { useState } from 'react'
-import { getTheme, setTheme, type Theme } from '../lib/theme'
 import { client, useGenerationStore } from '../store/generation'
+import { ThemePicker } from './ThemePicker'
 
 function formatGb(bytes: number): string {
   return (bytes / 1024 ** 3).toFixed(1)
 }
 
-const THEME_LABEL: Record<Theme, string> = { system: '自動', light: '淡色', dark: '暗色' }
-const NEXT_THEME: Record<Theme, Theme> = { system: 'light', light: 'dark', dark: 'system' }
-
 export function Header() {
-  const [theme, setThemeState] = useState<Theme>(getTheme())
-  const cycleTheme = () => {
-    const next = NEXT_THEME[theme]
-    setTheme(next)
-    setThemeState(next)
-  }
-
   const connected = useGenerationStore((s) => s.connected)
+  const wsConnected = useGenerationStore((s) => s.wsConnected)
   const vram = useGenerationStore((s) => s.vram)
   const queueRemaining = useGenerationStore((s) => s.queueRemaining)
   const stop = useGenerationStore((s) => s.stop)
-  const freeVram = useGenerationStore((s) => s.freeVram)
-  const openOutputFolder = useGenerationStore((s) => s.openOutputFolder)
+  const refreshCapability = useGenerationStore((s) => s.refreshCapability)
   const setGuideOpen = useGenerationStore((s) => s.setGuideOpen)
 
   const vramUsed = vram ? vram.total - vram.free : 0
   const vramPct = vram && vram.total > 0 ? Math.min(100, (vramUsed / vram.total) * 100) : 0
+  const connectionLabel = !connected ? '未接続' : wsConnected ? '接続済み' : 'APIのみ'
+  const connectionDot = !connected ? 'bg-red-400' : wsConnected ? 'bg-green-500' : 'bg-amber-400'
 
   return (
     <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-cream-200 bg-surface px-3 py-2 sm:gap-4 sm:px-5 sm:py-3">
@@ -36,11 +27,13 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-1.5 rounded-full bg-cream-100 px-2.5 py-1 text-xs text-ink-600">
-        <span className={`h-2 w-2 rounded-full ${connected ? 'bg-green-500' : 'bg-red-400'}`} />
-        <span className="hidden sm:inline">{connected ? 'ComfyUI 接続済み' : 'ComfyUI 未接続'}</span>
-        <span className="sm:hidden">{connected ? '接続済' : '未接続'}</span>
+        <span className={`h-2 w-2 rounded-full ${connectionDot}`} />
+        <span className="hidden sm:inline">ComfyUI {connectionLabel}</span>
+        <span className="sm:hidden">{connectionLabel}</span>
         {queueRemaining > 0 && <span className="ml-1 font-semibold text-accent-600">キュー {queueRemaining}</span>}
       </div>
+
+      <ThemePicker />
 
       {/* 操作系: モバイルでは折り返して2段目に並ぶ。横スクロールは発生させない */}
       <div className="flex w-full items-center gap-2 sm:ml-auto sm:w-auto sm:gap-3">
@@ -50,43 +43,37 @@ export function Header() {
             <div className="h-full rounded-full bg-accent-500 transition-all" style={{ width: `${vramPct}%` }} />
           </div>
           <span className="text-xs tabular-nums text-ink-600">
-            {vram ? `${formatGb(vramUsed)}/${formatGb(vram.total)}GB` : '--'}
+            {vram ? `${formatGb(vramUsed)} / ${formatGb(vram.total)} GB` : '--'}
           </span>
+          <button
+            type="button"
+            onClick={() => void refreshCapability()}
+            className="rounded px-1 text-ink-400 hover:bg-cream-100 hover:text-accent-600"
+            title="GPU能力とモデル在庫を再診断"
+            aria-label="GPU能力とモデル在庫を再診断"
+          >
+            ↻
+          </button>
         </div>
         <button
           onClick={() => void stop()}
-          className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100"
+          className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100"
         >
           ■ 停止
         </button>
         <button
-          onClick={() => void freeVram()}
-          className="rounded-lg border border-cream-200 px-2.5 py-1.5 text-xs font-semibold text-ink-600 hover:bg-cream-100"
-          title="モデルをアンロードしてVRAMを解放"
-        >
-          解放
-        </button>
-        <button
-          onClick={() => void openOutputFolder('')}
-          className="hidden rounded-lg border border-cream-200 px-2.5 py-1.5 text-xs font-semibold text-ink-600 hover:bg-cream-100 sm:block"
-          title="生成物の保存フォルダをエクスプローラーで開く(PCのみ)"
-        >
-          出力フォルダ
-        </button>
-        <button
-          onClick={cycleTheme}
-          className="rounded-lg border border-cream-200 px-2.5 py-1.5 text-xs font-semibold text-ink-600 hover:bg-cream-100"
-          title="表示テーマを切替(自動→淡色→暗色)"
-        >
-          {THEME_LABEL[theme]}
-        </button>
-        <button
           onClick={() => setGuideOpen(true)}
-          className="rounded-lg border border-accent-400 bg-orange-50 px-2.5 py-1.5 text-xs font-semibold text-accent-600 hover:bg-orange-100"
+          className="rounded-lg border border-accent-400 bg-accent-50 px-2.5 py-1.5 text-xs font-semibold text-accent-600 hover:bg-accent-200"
         >
           使い方
         </button>
-        <span className="ml-auto hidden text-xs text-ink-400 lg:inline">{client.baseUrl}</span>
+        <a
+          href="/auth/logout"
+          className="rounded-lg border border-cream-200 px-3 py-1.5 text-xs font-semibold text-ink-600 hover:bg-cream-100"
+        >
+          ログアウト
+        </a>
+        <span className="hidden text-xs text-ink-400 2xl:inline">{client.baseUrl}</span>
       </div>
     </header>
   )

@@ -1,0 +1,30 @@
+{
+  "defaultProfile": "full",
+  "profiles": {
+    "minimal": {
+      "mode": "minimal",
+      "customNodes": []
+    },
+    "image": {
+      "mode": "minimal",
+      "customNodes": []
+    },
+    "video": {
+      "mode": "minimal",
+      "customNodes": []
+    },
+    "full": {
+      "mode": "all",
+      "customNodes": [
+        "ComfyUI_IPAdapter_plus",
+        "ComfyUI-Advanced-ControlNet",
+        "comfyui-controlnet-aux",
+        "ComfyUI-Impact-Pack",
+        "comfyui-local-image-bench",
+        "ComfyUI-RMBG",
+        "ComfyUI-VideoHelperSuite",
+        "frameweaver_openfolder"
+      ]
+    }
+  }
+}

@@ -25,6 +25,10 @@ dist-ssr
 
 _trash/
 __pycache__/
+.worktrees/
+/frameweaverd/target/
 
 # 生成サンプル(NSFW・実写人物を含むため公開リポジトリからは除外。手元には残す)
 samples/
+test-results/
+playwright-report/

@@ -140,7 +140,7 @@ export function HistoryDetail() {
               {item.prompt}
             </p>
             {showJa && (
-              <div className="mt-1.5 rounded-lg border border-accent-200 bg-orange-50/60 p-3">
+              <div className="mt-1.5 rounded-lg border border-accent-200 bg-accent-50/60 p-3">
                 <p className="mb-1 text-[10px] font-bold tracking-wider text-accent-500">和訳(レビュー用)</p>
                 <p className="max-h-40 overflow-y-auto whitespace-pre-wrap text-sm leading-relaxed text-ink-700">{jaText}</p>
               </div>
